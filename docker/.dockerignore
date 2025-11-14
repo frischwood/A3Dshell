@@ -1,0 +1,38 @@
+# Don't copy these to Docker image
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Don't copy outputs and cache (they'll be created fresh)
+output/*
+cache/*
+
+# Don't copy git files
+.git/
+.gitignore
+
+# Don't copy test files
+test_*.py
+*_test.py
+
+# Don't copy documentation markdown (except README, QUICKSTART, SETUP_COMPLETE)
+IMPLEMENTATION_STATUS.md
+COMPLETION_SUMMARY.md
+
+# Don't copy temporary files
+*.log
+*.tmp
+tmp/
+temp/
+
+# Don't copy IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store

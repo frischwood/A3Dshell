@@ -1,0 +1,86 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Data files
+input/
+cache/
+
+# Outputs (don't commit simulation results)
+output/*/
+output/*.zip
+
+# Cache (don't commit downloaded data)
+cache/dem_tiles/*
+cache/maps/*
+cache/metadata.json
+
+# Logs
+*.log
+*.log.*
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# User configurations (optionally commit)
+# config/*.ini  # Uncomment to ignore user configs
+
+# Keep example configs
+!config/example*.ini
+
+# Documentation (can be generated)
+# Uncomment if you don't want these in git:
+# IMPLEMENTATION_STATUS.md
+# COMPLETION_SUMMARY.md
+# SETUP_COMPLETE.md
+
+# Downloaded TLM data
+input/tlm/*
+
+# Jupyter notebooks (if any)
+*.ipynb
+.ipynb_checkpoints/
+
+# OS specific
+Thumbs.db
+.DS_Store
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Dev files to ignore on main branch
+COMPLETION_SUMMARY.md
+IMPLEMENTATION_STATUS.md
+SETUP_COMPLETE.md   
+GUI_README*
+QUICKSTART.md
+BUILD_NOTES.md
+DOCKER.md
+
+copy_input_files.sh
+publish-docker.yml
+docker-quickstart.sh

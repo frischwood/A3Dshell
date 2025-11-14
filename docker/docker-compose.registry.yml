@@ -1,0 +1,54 @@
+version: '3.8'
+
+# This docker-compose file uses pre-built images from GitHub Container Registry
+# No building required - just pull and run!
+#
+# Usage:
+#   docker-compose -f docker-compose.registry.yml run --rm a3dshell python -m src.cli --config config/example_quick_test.ini
+#   docker-compose -f docker-compose.registry.yml up  # Starts GUI on http://localhost:8501
+
+services:
+  a3dshell:
+    # Pull pre-built image from GitHub Container Registry
+    image: ghcr.io/frischho/a3dshell:latest
+
+    # Pin to specific version for reproducibility (recommended for production)
+    # image: ghcr.io/frischho/a3dshell:v1.0.0
+
+    container_name: a3dshell
+
+    # Mount volumes for persistence
+    volumes:
+      # Output directory - simulation results
+      - ../output:/app/a3dshell/output
+
+      # Cache directory - downloaded DEM/maps (persistent across runs)
+      - ../cache:/app/a3dshell/cache
+
+      # Config directory - your configuration files
+      - ../config:/app/a3dshell/config
+
+      # Optional: Mount custom shapefiles
+      # - /path/to/your/shapefiles:/app/shapefiles:ro
+
+    # Port mapping for GUI
+    ports:
+      - "8501:8501"
+
+    # Environment variables
+    environment:
+      - PYTHONUNBUFFERED=1
+
+    # Default command - starts GUI
+    # Override for CLI: docker-compose -f docker-compose.registry.yml run --rm a3dshell python -m src.cli --config config/example_basic.ini
+    command: ["streamlit", "run", "gui_app.py", "--server.address=0.0.0.0"]
+
+    # Limit resources (optional)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '4'
+    #       memory: 8G
+    #     reservations:
+    #       cpus: '2'
+    #       memory: 4G
