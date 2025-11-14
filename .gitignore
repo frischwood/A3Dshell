@@ -83,5 +83,5 @@ BUILD_NOTES.md
 DOCKER.md
 
 copy_input_files.sh
-publish-docker.yml
+
 docker-quickstart.sh
