@@ -21,19 +21,34 @@ ENV/
 *.swo
 .DS_Store
 
-# Data files
-input/
-cache/
-config/shapefiles/
+# Input data (keep structure but not content)
+input/*
+!input/.gitkeep
+!input/brdf-files/
+!input/templates/
+!input/imis/
+!input/tlm/
+!input/bin/
+input/bin/*
+!input/bin/.gitkeep
+
+# Shapefiles (custom user shapefiles)
+config/shapefiles/*
+!config/shapefiles/.gitkeep
 
 # Outputs (don't commit simulation results)
-output/*/
-output/*.zip
+output/*
+!output/.gitkeep
 
-# Cache (don't commit downloaded data)
+# Cache (don't commit downloaded data, but keep directory structure)
+cache/*
+!cache/.gitkeep
+!cache/dem_tiles/
+!cache/maps/
 cache/dem_tiles/*
+!cache/dem_tiles/.gitkeep
 cache/maps/*
-cache/metadata.json
+!cache/maps/.gitkeep
 
 # Logs
 *.log

@@ -25,12 +25,12 @@ git log --oneline -5
 
 # Verify remote is set correctly
 git remote -v
-# Should show: origin  https://github.com/frischho/a3dshell.git
+# Should show: origin  https://github.com/frischwood/A3Dshell.git
 ```
 
 **If remote is not set:**
 ```bash
-git remote add origin https://github.com/frischho/a3dshell.git
+git remote add origin https://github.com/frischwood/A3Dshell.git
 ```
 
 ## Step 2: Push to GitHub (First Time)
@@ -53,14 +53,14 @@ Delta compression using up to 8 threads
 Compressing objects: 100% (156/156), done.
 Writing objects: 100% (245/245), 1.23 MiB | 2.45 MiB/s, done.
 Total 245 (delta 78), reused 0 (delta 0)
-To https://github.com/frischho/a3dshell.git
+To https://github.com/frischwood/A3Dshell.git
  * [new branch]      main -> main
 Branch 'main' set up to track remote branch 'main' from 'origin'.
 ```
 
 ## Step 3: Verify GitHub Repository Settings
 
-1. Go to: https://github.com/frischho/a3dshell
+1. Go to: https://github.com/frischwood/A3Dshell
 2. Click **Settings** → **Actions** → **General**
 3. Scroll to **Workflow permissions**
 4. Ensure **Read and write permissions** is selected
@@ -104,7 +104,7 @@ Enumerating objects: 1, done.
 Counting objects: 100% (1/1), done.
 Writing objects: 100% (1/1), 234 bytes | 234.00 KiB/s, done.
 Total 1 (delta 0), reused 0 (delta 0)
-To https://github.com/frischho/a3dshell.git
+To https://github.com/frischwood/A3Dshell.git
  * [new tag]         v0.1.0 -> v0.1.0
 ```
 
@@ -137,20 +137,20 @@ gh release create v0.1.0 \
 ### Docker Image
 Pull the image:
 \`\`\`bash
-docker pull ghcr.io/frischho/a3dshell:v0.1.0
-docker pull ghcr.io/frischho/a3dshell:latest
+docker pull ghcr.io/frischwood/A3Dshell:v0.1.0
+docker pull ghcr.io/frischwood/A3Dshell:latest
 \`\`\`
 
 ### Quick Start
 \`\`\`bash
-git clone https://github.com/frischho/a3dshell.git
+git clone https://github.com/frischwood/A3Dshell.git
 cd a3dshell
-docker pull ghcr.io/frischho/a3dshell:latest
+docker pull ghcr.io/frischwood/A3Dshell:latest
 docker run --rm -p 8501:8501 \\
   -v \$(pwd)/output:/app/a3dshell/output \\
   -v \$(pwd)/cache:/app/a3dshell/cache \\
   -v \$(pwd)/config:/app/a3dshell/config \\
-  ghcr.io/frischho/a3dshell:latest
+  ghcr.io/frischwood/A3Dshell:latest
 # Open http://localhost:8501
 \`\`\`
 
@@ -167,12 +167,12 @@ docker run --rm -p 8501:8501 \\
 - Interactive map currently supports rectangle drawing only
 
 ---
-**Full Changelog**: https://github.com/frischho/a3dshell/commits/v0.1.0"
+**Full Changelog**: https://github.com/frischwood/A3Dshell/commits/v0.1.0"
 ```
 
 ### Option B: Using GitHub Web Interface
 
-1. Go to: https://github.com/frischho/a3dshell/releases
+1. Go to: https://github.com/frischwood/A3Dshell/releases
 2. Click **"Draft a new release"**
 3. **Choose a tag**: Select `v0.1.0` from dropdown (or type it)
 4. **Release title**: `A3DShell v0.1.0 - Initial Release`
@@ -183,7 +183,7 @@ docker run --rm -p 8501:8501 \\
 
 The Docker image will be built automatically:
 
-1. Go to: https://github.com/frischho/a3dshell/actions
+1. Go to: https://github.com/frischwood/A3Dshell/actions
 2. You should see **"Publish Docker Image"** workflow running
 3. Click on the workflow run to see progress
 4. Build takes approximately **8-12 minutes** (multi-platform build)
@@ -197,7 +197,7 @@ The Docker image will be built automatically:
 ✓ Build and push Docker image
   - Building for linux/amd64
   - Building for linux/arm64
-  - Pushing to ghcr.io/frischho/a3dshell
+  - Pushing to ghcr.io/frischwood/A3Dshell
 ✓ Image digest
 ```
 
@@ -223,18 +223,18 @@ Once the GitHub Action completes successfully:
 
 ```bash
 # Pull the published image
-docker pull ghcr.io/frischho/a3dshell:v0.1.0
-docker pull ghcr.io/frischho/a3dshell:latest
+docker pull ghcr.io/frischwood/A3Dshell:v0.1.0
+docker pull ghcr.io/frischwood/A3Dshell:latest
 
 # Verify image exists
 docker images | grep a3dshell
 
 # Expected output:
-# ghcr.io/frischho/a3dshell   v0.1.0    abc123def456   5 minutes ago   1.2GB
-# ghcr.io/frischho/a3dshell   latest    abc123def456   5 minutes ago   1.2GB
+# ghcr.io/frischwood/A3Dshell   v0.1.0    abc123def456   5 minutes ago   1.2GB
+# ghcr.io/frischwood/A3Dshell   latest    abc123def456   5 minutes ago   1.2GB
 
 # Test the image - Check build info
-docker run --rm ghcr.io/frischho/a3dshell:v0.1.0 cat BUILD_INFO.txt
+docker run --rm ghcr.io/frischwood/A3Dshell:v0.1.0 cat BUILD_INFO.txt
 
 # Expected output:
 # ==================================================
@@ -248,7 +248,7 @@ docker run --rm ghcr.io/frischho/a3dshell:v0.1.0 cat BUILD_INFO.txt
 # ...
 
 # Test GUI
-docker run --rm -p 8501:8501 ghcr.io/frischho/a3dshell:v0.1.0
+docker run --rm -p 8501:8501 ghcr.io/frischwood/A3Dshell:v0.1.0
 
 # Open browser to http://localhost:8501
 # Verify GUI loads and shows build info in sidebar
@@ -258,14 +258,14 @@ docker run --rm -p 8501:8501 ghcr.io/frischho/a3dshell:v0.1.0
 
 ```bash
 # Check OCI labels
-docker inspect ghcr.io/frischho/a3dshell:v0.1.0 | jq '.[0].Config.Labels'
+docker inspect ghcr.io/frischwood/A3Dshell:v0.1.0 | jq '.[0].Config.Labels'
 
 # Should show:
 # {
 #   "org.opencontainers.image.created": "2025-01-14T...",
 #   "org.opencontainers.image.version": "v0.1.0",
 #   "org.opencontainers.image.revision": "abc123...",
-#   "org.opencontainers.image.source": "https://github.com/frischho/a3dshell",
+#   "org.opencontainers.image.source": "https://github.com/frischwood/A3Dshell",
 #   ...
 # }
 ```
@@ -274,7 +274,7 @@ docker inspect ghcr.io/frischho/a3dshell:v0.1.0 | jq '.[0].Config.Labels'
 
 If your repository is currently private:
 
-1. Go to: https://github.com/frischho/a3dshell/settings
+1. Go to: https://github.com/frischwood/A3Dshell/settings
 2. Scroll to bottom → **Danger Zone**
 3. Click **"Change visibility"**
 4. Select **"Make public"**
@@ -294,8 +294,8 @@ Add to top of `README.md`:
 ```markdown
 # A3DShell
 
-[![Release](https://img.shields.io/github/v/release/frischho/a3dshell)](https://github.com/frischho/a3dshell/releases)
-[![Docker](https://img.shields.io/badge/docker-ghcr.io-blue)](https://github.com/frischho/a3dshell/pkgs/container/a3dshell)
+[![Release](https://img.shields.io/github/v/release/frischwood/A3Dshell)](https://github.com/frischwood/A3Dshell/releases)
+[![Docker](https://img.shields.io/badge/docker-ghcr.io-blue)](https://github.com/frischwood/A3Dshell/pkgs/container/a3dshell)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Alpine 3D Simulation Helper - Preprocessing tool for Alpine3D simulations
@@ -318,18 +318,18 @@ cd /tmp
 mkdir test-a3dshell && cd test-a3dshell
 
 # Clone repo
-git clone https://github.com/frischho/a3dshell.git
+git clone https://github.com/frischwood/A3Dshell.git
 cd a3dshell
 
 # Pull image
-docker pull ghcr.io/frischho/a3dshell:latest
+docker pull ghcr.io/frischwood/A3Dshell:latest
 
 # Run GUI
 docker run --rm -p 8501:8501 \
   -v $(pwd)/output:/app/a3dshell/output \
   -v $(pwd)/cache:/app/a3dshell/cache \
   -v $(pwd)/config:/app/a3dshell/config \
-  ghcr.io/frischho/a3dshell:latest
+  ghcr.io/frischwood/A3Dshell:latest
 
 # Open http://localhost:8501
 # Test basic functionality:
@@ -344,7 +344,7 @@ docker run --rm -p 8501:8501 \
 
 ### Image Not Found After Push
 
-**Problem:** `docker pull ghcr.io/frischho/a3dshell:v0.1.0` fails with "not found"
+**Problem:** `docker pull ghcr.io/frischwood/A3Dshell:v0.1.0` fails with "not found"
 
 **Solution:**
 1. Check GitHub Actions completed successfully
@@ -357,7 +357,7 @@ docker run --rm -p 8501:8501 \
 
 **Solution:**
 1. Verify `.github/workflows/publish-docker.yml` exists in repo
-2. Check workflow file syntax: https://github.com/frischho/a3dshell/actions
+2. Check workflow file syntax: https://github.com/frischwood/A3Dshell/actions
 3. Ensure tag matches pattern: `v*.*.*` (e.g., `v0.1.0`, not `0.1.0`)
 
 ### Permission Denied When Pushing to GHCR
@@ -407,7 +407,7 @@ gh release create v0.2.0 \
 - Feature X added
 - Bug Y fixed
 
-**Full Changelog**: https://github.com/frischho/a3dshell/compare/v0.1.0...v0.2.0"
+**Full Changelog**: https://github.com/frischwood/A3Dshell/compare/v0.1.0...v0.2.0"
 
 # 4. Monitor Actions and verify
 ```
@@ -426,14 +426,14 @@ git tag -d v0.1.0
 git push origin :refs/tags/v0.1.0
 
 # Pull and test latest image
-docker pull ghcr.io/frischho/a3dshell:latest
-docker run --rm ghcr.io/frischho/a3dshell:latest cat BUILD_INFO.txt
+docker pull ghcr.io/frischwood/A3Dshell:latest
+docker run --rm ghcr.io/frischwood/A3Dshell:latest cat BUILD_INFO.txt
 
 # View GitHub package
-open https://github.com/frischho/a3dshell/pkgs/container/a3dshell
+open https://github.com/frischwood/A3Dshell/pkgs/container/a3dshell
 
 # View releases
-open https://github.com/frischho/a3dshell/releases
+open https://github.com/frischwood/A3Dshell/releases
 ```
 
 ## Checklist for First Release
@@ -448,7 +448,7 @@ Use this checklist for your v0.1.0 release:
 - [ ] Monitored GitHub Actions workflow (completed successfully)
 - [ ] Verified image on GHCR: https://github.com/frischho?tab=packages
 - [ ] Package visibility set to "Public"
-- [ ] Tested pulling image: `docker pull ghcr.io/frischho/a3dshell:v0.1.0`
+- [ ] Tested pulling image: `docker pull ghcr.io/frischwood/A3Dshell:v0.1.0`
 - [ ] Verified BUILD_INFO.txt contains correct version info
 - [ ] Tested GUI loads and works
 - [ ] Repository is public (if desired)

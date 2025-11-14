@@ -10,10 +10,10 @@ version: '3.8'
 services:
   a3dshell:
     # Pull pre-built image from GitHub Container Registry
-    image: ghcr.io/frischho/a3dshell:latest
+    image: ghcr.io/frischwood/A3Dshell:latest
 
     # Pin to specific version for reproducibility (recommended for production)
-    # image: ghcr.io/frischho/a3dshell:v1.0.0
+    # image: ghcr.io/frischwood/A3Dshell:v1.0.0
 
     container_name: a3dshell
 

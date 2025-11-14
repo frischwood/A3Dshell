@@ -1,0 +1,27 @@
+SMET 1.1 ASCII
+[HEADER]
+station_id       = {{station_id}}
+station_name     = {{station_name}}
+latitude         = {{latitude}}
+longitude        = {{longitude}}
+altitude         = {{altitude}}
+nodata           = {{nodata}}
+tz               = {{tz}}
+source           = {{source}}
+ProfileDate      = {{profileDate}}
+HS_Last          = {{hs_last}}
+SlopeAngle       = {{slopeangle}}
+SlopeAzi         = {{slopeazi}}
+nSoilLayerData   = {{nsoillayerdata}}
+nSnowLayerData   = {{nsnowlayerdata}}
+SoilAlbedo       = {{soilalbedo}}
+BareSoil_z0      = {{baresoil_z0}}
+CanopyHeight     = {{canopyheight}}
+CanopyLeafAreaIndex = {{canopyleafareaindex}}
+CanopyDirectThroughfall = {{canopydirecthroughfall}}
+WindScalingFactor = {{windscalingfactor}}
+ErosionLevel     = {{erosionlevel}}
+TimeCountDeltaHS = {{timecountdeltahs}}
+fields           = {{fields}}
+[DATA]
+{{data}}

@@ -54,18 +54,18 @@ For other Linux distributions, see: https://docs.docker.com/engine/install/
 
 ```bash
 # Clone the repository
-git clone https://github.com/frischho/a3dshell.git
+git clone https://github.com/frischwood/A3Dshell.git
 cd a3dshell
 
 # Pull the latest Docker image
-docker pull ghcr.io/frischho/a3dshell:latest
+docker pull ghcr.io/frischwood/A3Dshell:latest
 
 # Start the GUI
 docker run --rm -p 8501:8501 \
   -v $(pwd)/output:/app/a3dshell/output \
   -v $(pwd)/cache:/app/a3dshell/cache \
   -v $(pwd)/config:/app/a3dshell/config \
-  ghcr.io/frischho/a3dshell:latest
+  ghcr.io/frischwood/A3Dshell:latest
 
 # Then open browser to: http://localhost:8501
 # (Note: Use localhost, NOT 0.0.0.0)
@@ -79,13 +79,13 @@ mkdir -p a3dshell/{output,cache,config}
 cd a3dshell
 
 # Download example config (optional)
-wget -P config/ https://raw.githubusercontent.com/frischho/a3dshell/main/config/example_quick_test.ini
+wget -P config/ https://raw.githubusercontent.com/frischwood/A3Dshell/main/config/example_quick_test.ini
 
 # Download docker-compose file
-wget https://raw.githubusercontent.com/frischho/a3dshell/main/docker/docker-compose.registry.yml
+wget https://raw.githubusercontent.com/frischwood/A3Dshell/main/docker/docker-compose.registry.yml
 
 # Pull and run
-docker pull ghcr.io/frischho/a3dshell:latest
+docker pull ghcr.io/frischwood/A3Dshell:latest
 docker-compose -f docker-compose.registry.yml up
 ```
 
@@ -102,7 +102,7 @@ docker run --rm \
   -v $(pwd)/output:/app/a3dshell/output \
   -v $(pwd)/cache:/app/a3dshell/cache \
   -v $(pwd)/config:/app/a3dshell/config \
-  ghcr.io/frischho/a3dshell:latest \
+  ghcr.io/frischwood/A3Dshell:latest \
   python -m src.cli --config config/example_quick_test.ini
 ```
 
@@ -112,14 +112,11 @@ For local development or if you prefer not to use Docker:
 
 ```bash
 # Clone the repository
-git clone https://github.com/frischho/a3dshell.git
-cd a3dshell
+git clone https://github.com/frischwood/A3Dshell.git
+cd A3Dshell
 
 # Install Python dependencies
 pip install -r requirements.txt
-
-# Copy input files from original data directory
-bash copy_input_files.sh
 ```
 
 **Python Requirements:**
@@ -196,12 +193,12 @@ SKIP_SNOWPACK = true
 
 **With Docker:**
 ```bash
-docker pull ghcr.io/frischho/a3dshell:latest
+docker pull ghcr.io/frischwood/A3Dshell:latest
 docker run --rm -p 8501:8501 \
   -v $(pwd)/output:/app/a3dshell/output \
   -v $(pwd)/cache:/app/a3dshell/cache \
   -v $(pwd)/config:/app/a3dshell/config \
-  ghcr.io/frischho/a3dshell:latest
+  ghcr.io/frischwood/A3Dshell:latest
 ```
 
 **Without Docker:**
@@ -291,7 +288,7 @@ docker run --rm \
   -v $(pwd)/output:/app/a3dshell/output \
   -v $(pwd)/cache:/app/a3dshell/cache \
   -v $(pwd)/config:/app/a3dshell/config \
-  ghcr.io/frischho/a3dshell:latest \
+  ghcr.io/frischwood/A3Dshell:latest \
   python -m src.cli --config config/my_simulation.ini
 
 # Without Docker
@@ -396,7 +393,7 @@ docker run --rm \
   -v $(pwd)/output:/app/a3dshell/output \
   -v $(pwd)/cache:/app/a3dshell/cache \
   -v $(pwd)/config:/app/a3dshell/config \
-  ghcr.io/frischho/a3dshell:latest \
+  ghcr.io/frischwood/A3Dshell:latest \
   python -m src.cli --config config/example_quick_test.ini
 
 # With shapefile (mount additional volume)
@@ -405,7 +402,7 @@ docker run --rm \
   -v $(pwd)/cache:/app/a3dshell/cache \
   -v $(pwd)/config:/app/a3dshell/config \
   -v /path/to/shapefiles:/app/shapefiles:ro \
-  ghcr.io/frischho/a3dshell:latest \
+  ghcr.io/frischwood/A3Dshell:latest \
   python -m src.cli --config config/my_simulation.ini \
     --roi-shapefile /app/shapefiles/roi.shp
 ```
@@ -545,7 +542,7 @@ pip install --upgrade streamlit
 ```bash
 streamlit run gui_app.py --server.port 8502
 # or with Docker:
-docker run -p 8502:8501 ... ghcr.io/frischho/a3dshell:latest
+docker run -p 8502:8501 ... ghcr.io/frischwood/A3Dshell:latest
 ```
 
 **Blank screen or GUI not loading:**
@@ -613,7 +610,7 @@ conda install -c conda-forge geopandas rasterio pyproj
 docker login ghcr.io
 
 # Or use specific version
-docker pull ghcr.io/frischho/a3dshell:v1.0.0
+docker pull ghcr.io/frischwood/A3Dshell:v1.0.0
 ```
 
 **Volume mount issues on Windows:**
@@ -635,9 +632,9 @@ sudo chown -R 1000:1000 output/ cache/ config/
 
 Pull from GitHub Container Registry:
 ```bash
-docker pull ghcr.io/frischho/a3dshell:latest    # Latest stable
-docker pull ghcr.io/frischho/a3dshell:v1.0.0    # Specific version
-docker pull ghcr.io/frischho/a3dshell:1.0       # Minor version
+docker pull ghcr.io/frischwood/A3Dshell:latest    # Latest stable
+docker pull ghcr.io/frischwood/A3Dshell:v1.0.0    # Specific version
+docker pull ghcr.io/frischwood/A3Dshell:1.0       # Minor version
 ```
 
 ### What's Included
@@ -657,7 +654,7 @@ To check which versions of MeteoIO and Snowpack are included in your Docker imag
 
 ```bash
 # View build information
-docker run --rm ghcr.io/frischho/a3dshell:v1.0.0 cat BUILD_INFO.txt
+docker run --rm ghcr.io/frischwood/A3Dshell:v1.0.0 cat BUILD_INFO.txt
 
 # Or via the GUI: Open http://localhost:8501 → Check sidebar "About" section
 ```
@@ -698,7 +695,7 @@ When using custom shapefiles for ROI definition, they **must be stored in a moun
      -v $(pwd)/cache:/app/a3dshell/cache \
      -v $(pwd)/config:/app/a3dshell/config \
      -v $(pwd)/shapefiles:/app/a3dshell/shapefiles:ro \
-     ghcr.io/frischho/a3dshell:latest
+     ghcr.io/frischwood/A3Dshell:latest
    ```
 
 3. **In the GUI**:
@@ -778,8 +775,8 @@ a3dshell/
 
 ```bash
 # Pull and start
-docker pull ghcr.io/frischho/a3dshell:latest
-docker run -p 8501:8501 -v $(pwd)/output:/app/a3dshell/output ghcr.io/frischho/a3dshell:latest
+docker pull ghcr.io/frischwood/A3Dshell:latest
+docker run -p 8501:8501 -v $(pwd)/output:/app/a3dshell/output ghcr.io/frischwood/A3Dshell:latest
 
 # In browser (localhost:8501):
 # 1. Load example_quick_test.ini
@@ -801,7 +798,7 @@ docker run --rm \
   -v $(pwd)/output:/app/a3dshell/output \
   -v $(pwd)/cache:/app/a3dshell/cache \
   -v $(pwd)/config:/app/a3dshell/config \
-  ghcr.io/frischho/a3dshell:latest \
+  ghcr.io/frischwood/A3Dshell:latest \
   python -m src.cli --config config/production.ini --log-level DEBUG
 
 # Results in output/production/
@@ -818,7 +815,7 @@ docker run --rm \
   -v $(pwd)/cache:/app/a3dshell/cache \
   -v $(pwd)/config:/app/a3dshell/config \
   -v $(pwd)/shapefiles:/app/shapefiles:ro \
-  ghcr.io/frischho/a3dshell:latest \
+  ghcr.io/frischwood/A3Dshell:latest \
   python -m src.cli \
     --name custom_region \
     --poi-x 783500 --poi-y 189500 --poi-z 1560 \

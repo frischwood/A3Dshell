@@ -70,8 +70,8 @@ ARG VERSION
 # Add metadata labels
 LABEL org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.authors="A3DShell Contributors" \
-      org.opencontainers.image.url="https://github.com/frischho/a3dshell" \
-      org.opencontainers.image.source="https://github.com/frischho/a3dshell" \
+      org.opencontainers.image.url="https://github.com/frischwood/A3Dshell" \
+      org.opencontainers.image.source="https://github.com/frischwood/A3Dshell" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.vendor="A3DShell" \
@@ -123,13 +123,11 @@ RUN pip install --upgrade pip && \
 COPY src/ ./src/
 COPY input/ ./input/
 COPY config/ ./config/
-COPY copy_input_files.sh .
 COPY gui_app.py .
-COPY run_gui.sh .
 COPY README.md ./
 
 # Create output and cache directories
-RUN mkdir -p output cache/dem_tiles cache/maps logs
+RUN mkdir -p output cache/dem_tiles cache/maps logs input/bin
 
 # Create BUILD_INFO.txt with version information
 RUN echo "==================================================" > BUILD_INFO.txt && \
@@ -150,9 +148,6 @@ RUN echo "==================================================" > BUILD_INFO.txt &
     echo "CMake Build Type: Release" >> BUILD_INFO.txt && \
     echo "==================================================" >> BUILD_INFO.txt && \
     rm -f /tmp/meteoio_version.txt /tmp/snowpack_version.txt
-
-# Set permissions
-RUN chmod +x copy_input_files.sh
 
 # Create a non-root user
 RUN useradd -m -u 1000 a3duser && \
