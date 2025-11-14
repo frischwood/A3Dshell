@@ -73,14 +73,14 @@ Thumbs.db
 *~
 
 # Dev files to ignore on main branch
-COMPLETION_SUMMARY.md
-IMPLEMENTATION_STATUS.md
-SETUP_COMPLETE.md   
-GUI_README*
-QUICKSTART.md
-BUILD_NOTES.md
-DOCKER.md
+# COMPLETION_SUMMARY.md
+# IMPLEMENTATION_STATUS.md
+# SETUP_COMPLETE.md   
+# GUI_README*
+# QUICKSTART.md
+# BUILD_NOTES.md
+# DOCKER.md
 
-copy_input_files.sh
-publish-docker.yml
-docker-quickstart.sh
+# copy_input_files.sh
+# publish-docker.yml
+# docker-quickstart.sh

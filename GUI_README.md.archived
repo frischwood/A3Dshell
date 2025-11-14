@@ -1,0 +1,140 @@
+# A3DShell GUI
+
+A simple web-based GUI for configuring and running A3DShell simulations using Streamlit.
+
+## Features
+
+- 📋 **Easy Configuration**: Fill in simulation parameters through intuitive forms
+- 💾 **Save/Load Configs**: Save configurations as .ini files and reload them later
+- 📍 **ROI Options**: Support for both bounding box and shapefile-based regions
+- ▶️ **Run Simulations**: Execute simulations directly from the GUI
+- 📊 **Live Output**: See simulation progress and logs in real-time
+- 🏔️ **User-Friendly**: No command-line knowledge required
+
+## Quick Start
+
+### Local (Without Docker)
+
+```bash
+# Install Streamlit if not already installed
+pip install streamlit
+
+# Launch the GUI
+./run_gui.sh
+
+# Or directly:
+streamlit run gui_app.py
+```
+
+The GUI will open automatically in your browser at `http://localhost:8501`
+
+### Docker
+
+```bash
+# Build and start the container with GUI
+cd docker
+docker-compose up
+
+# Access GUI at http://localhost:8501
+```
+
+## Using the GUI
+
+### 1. General Settings Tab
+
+- **Simulation Name**: Unique identifier for your simulation
+- **Coordinate System**: Choose between CH1903+, CH1903, or WGS84
+- **Simulation Period**: Set start and end dates/times
+
+### 2. Location & ROI Tab
+
+**Point of Interest (POI)**:
+- Enter coordinates (automatically converts CH1903 to EPSG:2056)
+- Set altitude
+
+**Region of Interest (ROI)**:
+- **Bounding Box Mode**: Specify size in meters around POI
+- **Shapefile Mode**: Upload custom shapefile for irregular regions
+- **Buffer Size**: Distance to search for meteorological stations
+
+### 3. Output Settings Tab
+
+- **Grid Spacing (GSD)**: Output resolution (smaller = higher resolution)
+- **Reference DEM**: Choose between 0.5m or 2.0m source resolution
+- **Land Use**:
+  - Use SwissTLMRegio for automatic land use mapping
+  - Or specify a constant PREVAH land use code
+
+### 4. Run Tab
+
+- **Configuration Summary**: Review all settings
+- **Save Config**: Save current configuration as .ini file
+- **Run Simulation**: Execute the simulation with chosen parameters
+- **Options**:
+  - Skip Snowpack preprocessing
+  - Set log level (INFO, DEBUG, WARNING, ERROR)
+
+## Loading Existing Configurations
+
+Use the sidebar to load previously saved .ini files:
+1. Click the dropdown menu
+2. Select a configuration file
+3. All fields will be populated automatically
+
+## Tips
+
+- **Start with Quick Test**: Use `example_quick_test.ini` for fast testing
+- **Save Often**: Save configurations before running to preserve settings
+- **Monitor Logs**: Watch the output area for progress and errors
+- **Check Output**: Find results in `output/{simulation_name}/` folder
+
+## Troubleshooting
+
+**GUI won't start**:
+```bash
+pip install --upgrade streamlit
+```
+
+**Port 8501 already in use**:
+```bash
+streamlit run gui_app.py --server.port 8502
+```
+
+**Can't find config files**:
+- Make sure you're running from the a3dshell directory
+- Config files should be in `config/` folder
+
+**Simulation fails**:
+- Check the log output in the GUI
+- Verify coordinates are valid Swiss coordinates
+- Ensure internet connection for DEM downloads
+
+## Docker-Specific
+
+**Start GUI in Docker**:
+```bash
+cd docker
+docker-compose up
+```
+
+**Stop GUI**:
+```bash
+# Press Ctrl+C or:
+docker-compose down
+```
+
+**Run CLI instead of GUI**:
+```bash
+docker-compose run --rm a3dshell python -m src.cli --config config/example_quick_test.ini
+```
+
+## Architecture
+
+The GUI (`gui_app.py`) is built with Streamlit and provides:
+- Tab-based interface for logical grouping
+- Form validation and error handling
+- Real-time subprocess execution
+- Configuration file I/O
+- Integration with existing CLI backend
+
+All GUI operations call the same backend (`src.cli`) that the command-line interface uses.
