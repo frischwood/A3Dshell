@@ -14,6 +14,12 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import configparser
 import os
+import folium
+from streamlit_folium import st_folium
+from folium.plugins import Draw
+import geopandas as gpd
+from shapely.geometry import shape
+from pyproj import Transformer
 
 # Page configuration
 st.set_page_config(
@@ -21,6 +27,130 @@ st.set_page_config(
     page_icon="🏔️",
     layout="wide"
 )
+
+# Helper functions
+def get_build_info():
+    """
+    Read and parse BUILD_INFO.txt if it exists (Docker environment).
+
+    Returns:
+        dict: Build information or None if not found
+    """
+    build_info_path = Path("BUILD_INFO.txt")
+    if build_info_path.exists():
+        try:
+            with open(build_info_path, 'r') as f:
+                content = f.read()
+            return content
+        except Exception as e:
+            return None
+    return None
+
+def find_shapefiles(base_dir):
+    """
+    Recursively find all .shp files in a directory.
+
+    Args:
+        base_dir: Base directory to search (str or Path)
+
+    Returns:
+        list: List of Path objects for found shapefiles, empty list if none found or dir invalid
+    """
+    try:
+        base_path = Path(base_dir)
+        if not base_path.exists() or not base_path.is_dir():
+            return []
+
+        # Find all .shp files recursively
+        shapefiles = sorted(base_path.rglob("*.shp"))
+        return shapefiles
+    except Exception as e:
+        return []
+
+def create_roi_map(center_lat=46.8, center_lon=8.2, zoom=8):
+    """
+    Create an interactive map with Swisstopo layers for drawing ROI polygons.
+
+    Args:
+        center_lat: Latitude for map center (WGS84)
+        center_lon: Longitude for map center (WGS84)
+        zoom: Initial zoom level
+
+    Returns:
+        folium.Map object with drawing tools
+    """
+    # Create base map centered on Switzerland
+    m = folium.Map(
+        location=[center_lat, center_lon],
+        zoom_start=zoom,
+        tiles=None  # We'll add custom tiles
+    )
+
+    # Add Swisstopo base layer (Swiss National Map)
+    folium.raster_layers.WmsTileLayer(
+        url='https://wms.geo.admin.ch/',
+        layers='ch.swisstopo.pixelkarte-farbe',
+        fmt='image/png',
+        transparent=False,
+        name='Swisstopo Map',
+        overlay=False,
+        control=True,
+        attr='© swisstopo'
+    ).add_to(m)
+
+    # Add drawing tools (rectangle only)
+    draw = Draw(
+        export=False,
+        draw_options={
+            'polyline': False,
+            'rectangle': True,
+            'circle': False,
+            'marker': False,
+            'circlemarker': False,
+            'polygon': False
+        },
+        edit_options={
+            'edit': True,
+            'remove': True
+        }
+    )
+    draw.add_to(m)
+
+    return m
+
+def save_drawn_roi(geojson_data, output_path):
+    """
+    Save drawn polygon as shapefile in Swiss coordinate system (EPSG:2056).
+
+    Args:
+        geojson_data: GeoJSON dict from drawn polygon
+        output_path: Path to save shapefile
+
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    try:
+        # Extract geometry from GeoJSON
+        geom = shape(geojson_data['geometry'])
+
+        # Create GeoDataFrame in WGS84
+        gdf = gpd.GeoDataFrame([{'id': 1}], geometry=[geom], crs='EPSG:4326')
+
+        # Transform to Swiss coordinate system (LV95)
+        gdf = gdf.to_crs('EPSG:2056')
+
+        # Ensure output directory exists
+        output_dir = Path(output_path).parent
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save as shapefile
+        gdf.to_file(output_path)
+
+        return True, f"✅ ROI saved successfully to {output_path}"
+
+    except Exception as e:
+        return False, f"❌ Error saving ROI: {str(e)}"
+
 
 # Title
 st.title("🏔️ A3DShell Simulation Setup")
@@ -36,6 +166,18 @@ selected_config = st.sidebar.selectbox(
     "Select configuration:",
     config_names
 )
+
+# Build Info section in sidebar
+st.sidebar.divider()
+st.sidebar.header("ℹ️ About")
+
+build_info = get_build_info()
+if build_info:
+    with st.sidebar.expander("🐳 Docker Build Info", expanded=False):
+        st.code(build_info, language=None)
+        st.caption("This information shows the exact versions of MeteoIO and Snowpack compiled into this Docker image.")
+else:
+    st.sidebar.info("Running in development mode (not Docker)")
 
 # Initialize session state
 if 'config' not in st.session_state:
@@ -127,47 +269,113 @@ with tab1:
 # Tab 2: Location & ROI
 # ============================================================
 with tab2:
-    st.header("Point of Interest (POI)")
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        poi_x = st.number_input(
-            "Easting (EPSG:2056 or CH1903)",
-            value=float(st.session_state.config.get('poi_x', 645000)),
-            format="%.1f",
-            help="X coordinate (auto-converts CH1903 to EPSG:2056)"
-        )
-
-    with col2:
-        poi_y = st.number_input(
-            "Northing (EPSG:2056 or CH1903)",
-            value=float(st.session_state.config.get('poi_y', 115000)),
-            format="%.1f",
-            help="Y coordinate (auto-converts CH1903 to EPSG:2056)"
-        )
-
-    with col3:
-        poi_z = st.number_input(
-            "Altitude (m)",
-            value=float(st.session_state.config.get('poi_z', 1500)),
-            format="%.1f"
-        )
-
-    st.divider()
     st.header("Region of Interest (ROI)")
 
     use_shapefile = st.checkbox(
         "Use custom shapefile for ROI",
-        value=st.session_state.config.get('use_shp', False)
+        value=st.session_state.config.get('use_shp', True)
     )
 
     if use_shapefile:
-        roi_shapefile = st.text_input(
-            "Shapefile Path",
-            value=st.session_state.config.get('roi_shapefile', ''),
-            help="Absolute or relative path to .shp file or .zip archive"
+        # Option to provide existing shapefile or draw new one
+        shapefile_option = st.radio(
+            "How to define ROI:",
+            ["📁 Use existing shapefile", "🗺️ Draw on interactive map"],
+            horizontal=True
         )
+
+        if shapefile_option == "📁 Use existing shapefile":
+            st.markdown("### 📁 Select Existing Shapefile")
+
+            # Shapefile browser
+            col1, col2 = st.columns([1, 2])
+
+            with col1:
+                search_dir = st.text_input(
+                    "Search directory:",
+                    value="config/",
+                    help="Directory to search for shapefiles (must be in a mounted volume)"
+                )
+
+            with col2:
+                # Find shapefiles in directory
+                found_shapefiles = find_shapefiles(search_dir)
+
+                if found_shapefiles:
+                    # Create dropdown options
+                    shapefile_options = ["[Type path manually]"] + [str(shp) for shp in found_shapefiles]
+
+                    selected_shapefile = st.selectbox(
+                        "Available shapefiles:",
+                        options=shapefile_options,
+                        help="Select from found shapefiles or choose to type manually"
+                    )
+
+                    # Auto-populate if user selected a file
+                    if selected_shapefile != "[Type path manually]":
+                        default_path = selected_shapefile
+                    else:
+                        default_path = st.session_state.config.get('roi_shapefile', '')
+                else:
+                    st.info(f"ℹ️ No shapefiles found in `{search_dir}`. Enter path manually below.")
+                    default_path = st.session_state.config.get('roi_shapefile', '')
+
+            # Manual path input (always available as fallback)
+            roi_shapefile = st.text_input(
+                "Shapefile path:",
+                value=default_path,
+                help="Path to .shp file (must be in a mounted volume: config/, shapefiles/, etc.)"
+            )
+
+            # Info message about Docker volumes
+            st.caption("💡 **Docker users**: Shapefiles must be in mounted volumes (e.g., `config/`, `shapefiles/`). See README for details.")
+        else:
+            # Interactive map for drawing ROI
+            st.markdown("### 🗺️ Draw ROI on Swiss Map")
+            st.info("**Instructions**: Use the rectangle tool (□) on the left side of the map to draw your ROI. Click the save button when done.")
+
+            # Initialize roi_shapefile from session state
+            roi_shapefile = st.session_state.config.get('roi_shapefile', '')
+
+            # Show map
+            roi_map = create_roi_map()
+            map_output = st_folium(roi_map, width=800, height=600, key="roi_map")
+
+            # Handle drawn polygon
+            if map_output and map_output.get('last_active_drawing'):
+                drawn_geom = map_output['last_active_drawing']
+
+                st.success("✅ Polygon drawn! Click button below to save as shapefile.")
+
+                # Input for shapefile name
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    shapefile_name = st.text_input(
+                        "Shapefile name",
+                        value="roi_drawn",
+                        help="Name for the shapefile (without .shp extension)"
+                    )
+                with col2:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    save_button = st.button("💾 Save ROI", type="primary")
+
+                if save_button and shapefile_name:
+                    # Save shapefile
+                    shapefile_dir = Path("config/shapefiles")
+                    shapefile_path = shapefile_dir / f"{shapefile_name}.shp"
+
+                    success, message = save_drawn_roi(drawn_geom, str(shapefile_path))
+                    if success:
+                        st.success(message)
+                        roi_shapefile = str(shapefile_path)
+                        st.session_state.config['roi_shapefile'] = str(shapefile_path)
+                        st.info(f"📍 Shapefile path set to: `{roi_shapefile}`")
+                    else:
+                        st.error(message)
+            else:
+                # Show warning if no polygon drawn yet
+                if not roi_shapefile:
+                    st.warning("⚠️ No polygon drawn yet. Use the drawing tools on the map.")
     else:
         roi_size = st.number_input(
             "ROI Size (meters)",
@@ -175,17 +383,58 @@ with tab2:
             min_value=100,
             max_value=50000,
             step=100,
-            help="Size of bounding box around POI"
+            help="Size of bounding box around center point"
         )
 
     buffer_size = st.number_input(
         "Buffer Size for IMIS Stations (meters)",
-        value=int(st.session_state.config.get('buffer_size', 50000)),
+        value=int(st.session_state.config.get('buffer_size', 10000)),
         min_value=1000,
         max_value=200000,
         step=1000,
         help="Distance to search for meteorological stations"
     )
+
+    st.divider()
+    st.header("Point of Interest (POI) - Optional")
+
+    use_poi = st.checkbox(
+        "Specify Point of Interest",
+        value=st.session_state.config.get('use_poi', False),
+        help="Optional: Specify a specific point for analysis. If disabled, ROI center will be used."
+    )
+
+    if use_poi:
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            poi_x = st.number_input(
+                "Easting (EPSG:2056 or CH1903)",
+                value=float(st.session_state.config.get('poi_x', 645000)),
+                format="%.1f",
+                help="X coordinate (auto-converts CH1903 to EPSG:2056)"
+            )
+
+        with col2:
+            poi_y = st.number_input(
+                "Northing (EPSG:2056 or CH1903)",
+                value=float(st.session_state.config.get('poi_y', 115000)),
+                format="%.1f",
+                help="Y coordinate (auto-converts CH1903 to EPSG:2056)"
+            )
+
+        with col3:
+            poi_z = st.number_input(
+                "Altitude (m)",
+                value=float(st.session_state.config.get('poi_z', 1500)),
+                format="%.1f"
+            )
+    else:
+        # Use default values when POI is not specified
+        poi_x = float(st.session_state.config.get('poi_x', 645000))
+        poi_y = float(st.session_state.config.get('poi_y', 115000))
+        poi_z = float(st.session_state.config.get('poi_z', 1500))
+        st.info("ℹ️ POI will be automatically set to ROI center during simulation.")
 
 # ============================================================
 # Tab 3: Output Settings
@@ -340,6 +589,11 @@ SP_BIN_PATH = input/bin/snowpack
 
     with col1:
         skip_snowpack = st.checkbox("Skip Snowpack preprocessing", value=False)
+
+        # VPN warning if Snowpack preprocessing is enabled
+        if not skip_snowpack:
+            st.warning("⚠️ **SLF/WSL VPN Required**: Snowpack preprocessing requires VPN access to the IMIS database via MeteoIO.")
+
         log_level = st.selectbox("Log Level", ["INFO", "DEBUG", "WARNING", "ERROR"])
 
     with col2:

@@ -414,6 +414,182 @@ Prevents unnecessary files from being copied into image.
 - Runs as UID 1000 (common user ID)
 - Avoids permission issues on Linux hosts
 
+## Version Tracking and Reproducibility
+
+### Overview
+
+A3DShell Docker images include comprehensive version tracking to ensure scientific reproducibility. Each image records:
+- Exact git commit hashes of MeteoIO and Snowpack
+- Build timestamps
+- Commit dates and branch information
+- Docker image metadata via OCI labels
+
+### BUILD_INFO.txt
+
+Every Docker image contains a `BUILD_INFO.txt` file at `/app/a3dshell/BUILD_INFO.txt` with complete build information:
+
+```
+==================================================
+A3DShell Docker Image Build Information
+==================================================
+
+Build Date: 2025-01-14 10:30:45 UTC
+
+--- MeteoIO ---
+MeteoIO_Commit=a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0
+MeteoIO_Date=2025-01-10 14:22:33 +0100
+MeteoIO_Branch=HEAD -> master, origin/master
+v3.2.0
+
+--- Snowpack ---
+Snowpack_Commit=x1y2z3a4b5c6d7e8f9g0h1i2j3k4l5m6n7o8p9q0
+Snowpack_Date=2025-01-09 16:45:12 +0100
+Snowpack_Branch=HEAD -> master, origin/master
+v3.7.1
+
+--- System ---
+Base Image: python:3.11-slim
+Platform: x86_64
+CMake Build Type: Release
+==================================================
+```
+
+### Docker Image Labels
+
+Images include OCI-compliant metadata labels:
+
+```bash
+# Inspect image labels
+docker inspect ghcr.io/frischho/a3dshell:v1.0.0 | jq '.[0].Config.Labels'
+```
+
+**Key Labels**:
+- `org.opencontainers.image.created` - Build timestamp
+- `org.opencontainers.image.version` - A3DShell version (e.g., "v1.0.0")
+- `org.opencontainers.image.revision` - Git commit of A3DShell repo
+- `org.opencontainers.image.source` - GitHub repository URL
+
+### GUI Display
+
+The Streamlit GUI automatically displays build information:
+1. Open GUI in browser
+2. Check sidebar → "About" section
+3. Expand "Docker Build Info"
+4. View complete MeteoIO and Snowpack version details
+
+In development mode (non-Docker), the GUI shows "Running in development mode (not Docker)".
+
+### How It Works
+
+**During Build**:
+
+1. **Capture git information** (Dockerfile lines 29-30, 48-49):
+```dockerfile
+git log -1 --format="MeteoIO_Commit=%H%nMeteoIO_Date=%ci%nMeteoIO_Branch=%D" > /tmp/meteoio_version.txt
+git describe --tags --always >> /tmp/meteoio_version.txt
+```
+
+2. **Copy to final image** (lines 84-85):
+```dockerfile
+COPY --from=builder /tmp/meteoio_version.txt /tmp/
+COPY --from=builder /tmp/snowpack_version.txt /tmp/
+```
+
+3. **Generate BUILD_INFO.txt** (lines 118-135):
+```dockerfile
+RUN echo "Build Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > BUILD_INFO.txt && \
+    cat /tmp/meteoio_version.txt >> BUILD_INFO.txt && \
+    cat /tmp/snowpack_version.txt >> BUILD_INFO.txt
+```
+
+4. **Add OCI labels** (lines 71-80):
+```dockerfile
+LABEL org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${VCS_REF}"
+```
+
+**During GitHub Actions Build**:
+
+The workflow passes build arguments (`.github/workflows/publish-docker.yml` lines 63-66):
+```yaml
+build-args: |
+  BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+  VCS_REF=${{ github.sha }}
+  VERSION=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.version'] }}
+```
+
+### Accessing Version Information
+
+**Method 1: View BUILD_INFO.txt in running container**
+```bash
+docker run --rm ghcr.io/frischho/a3dshell:v1.0.0 cat BUILD_INFO.txt
+```
+
+**Method 2: Inspect Docker labels**
+```bash
+docker inspect ghcr.io/frischho/a3dshell:v1.0.0 \
+  --format='{{index .Config.Labels "org.opencontainers.image.version"}}'
+```
+
+**Method 3: Via GUI**
+- Run container with GUI
+- Open http://localhost:8501
+- Check sidebar "About" → "Docker Build Info"
+
+**Method 4: Extract from image without running**
+```bash
+docker create --name temp ghcr.io/frischho/a3dshell:v1.0.0
+docker cp temp:/app/a3dshell/BUILD_INFO.txt ./BUILD_INFO.txt
+docker rm temp
+cat BUILD_INFO.txt
+```
+
+### Pinning Specific Versions
+
+To use specific versions of MeteoIO or Snowpack, modify the Dockerfile clone commands:
+
+```dockerfile
+# Pin to specific commit
+git clone https://gitlabext.wsl.ch/snow-models/meteoio.git && \
+cd meteoio && \
+git checkout a1b2c3d4e5f6  # Specific commit hash
+
+# Or pin to tag
+git clone https://gitlabext.wsl.ch/snow-models/meteoio.git && \
+cd meteoio && \
+git checkout v3.2.0  # Specific version tag
+```
+
+**Important**: After pinning versions, rebuild and tag the image appropriately to reflect the custom build.
+
+### Best Practices for Reproducibility
+
+1. **Always specify exact image tags** in production:
+   ```bash
+   # Good - reproducible
+   docker pull ghcr.io/frischho/a3dshell:v1.0.0
+
+   # Bad - version may change
+   docker pull ghcr.io/frischho/a3dshell:latest
+   ```
+
+2. **Record BUILD_INFO.txt** with simulation outputs:
+   ```bash
+   docker run --rm ghcr.io/frischho/a3dshell:v1.0.0 \
+     cat BUILD_INFO.txt > simulation_metadata/build_info.txt
+   ```
+
+3. **Include in publications**: Reference the Docker image tag and MeteoIO/Snowpack commit hashes from BUILD_INFO.txt
+
+4. **Archive images** for long-term reproducibility:
+   ```bash
+   # Save image to tarball
+   docker save ghcr.io/frischho/a3dshell:v1.0.0 | gzip > a3dshell-v1.0.0.tar.gz
+
+   # Load later
+   docker load < a3dshell-v1.0.0.tar.gz
+   ```
+
 ## Image Size Analysis
 
 ### Current Size Breakdown

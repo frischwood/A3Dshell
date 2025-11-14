@@ -41,7 +41,7 @@ services:
 
     # Default command - starts GUI
     # Override for CLI: docker-compose -f docker-compose.registry.yml run --rm a3dshell python -m src.cli --config config/example_basic.ini
-    command: ["streamlit", "run", "gui_app.py", "--server.address=0.0.0.0"]
+    command: ["streamlit", "run", "gui_app.py", "--server.address=0.0.0.0", "--server.port=8501", "--server.headless=true"]
 
     # Limit resources (optional)
     # deploy:

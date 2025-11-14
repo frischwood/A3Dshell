@@ -23,42 +23,86 @@ A3DShell automates the preparation of Alpine3D simulation inputs:
 
 ### Option 1: Docker - Pre-built Image (Recommended!)
 
-**No building required** - Just pull and run!
+#### First Time: Install Docker
+
+If you don't have Docker installed:
+
+**Windows & Mac:**
+1. Download Docker Desktop: https://www.docker.com/products/docker-desktop
+2. Install and start Docker Desktop
+3. Verify installation: `docker --version`
+
+**Linux:**
+```bash
+# Quick install script (Ubuntu/Debian)
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+
+# Add your user to docker group (avoid sudo)
+sudo usermod -aG docker $USER
+newgrp docker
+
+# Verify installation
+docker --version
+```
+
+For other Linux distributions, see: https://docs.docker.com/engine/install/
+
+#### Run A3DShell with Docker
+
+**Recommended**: Clone the repository first to get the complete directory structure and example configurations:
 
 ```bash
-# Pull the latest version
+# Clone the repository
+git clone https://github.com/frischho/a3dshell.git
+cd a3dshell
+
+# Pull the latest Docker image
 docker pull ghcr.io/frischho/a3dshell:latest
 
-# Start the web GUI
+# Start the GUI
 docker run --rm -p 8501:8501 \
   -v $(pwd)/output:/app/a3dshell/output \
   -v $(pwd)/cache:/app/a3dshell/cache \
   -v $(pwd)/config:/app/a3dshell/config \
   ghcr.io/frischho/a3dshell:latest
 
-# Access GUI at http://localhost:8501
+# Then open browser to: http://localhost:8501
+# (Note: Use localhost, NOT 0.0.0.0)
 ```
 
-Or run a simulation directly (CLI mode):
+**Alternative**: If you don't want to clone the full repo, create the required directories manually:
+
+```bash
+# Create directory structure
+mkdir -p a3dshell/{output,cache,config}
+cd a3dshell
+
+# Download example config (optional)
+wget -P config/ https://raw.githubusercontent.com/frischho/a3dshell/main/config/example_quick_test.ini
+
+# Download docker-compose file
+wget https://raw.githubusercontent.com/frischho/a3dshell/main/docker/docker-compose.registry.yml
+
+# Pull and run
+docker pull ghcr.io/frischho/a3dshell:latest
+docker-compose -f docker-compose.registry.yml up
+```
+
+**Important**: The Docker container needs these mounted directories:
+- `output/` - Simulation results are written here
+- `cache/` - Downloaded DEM/map tiles stored here (persistent)
+- `config/` - Configuration files and shapefiles read from here
+
+Without these mounts, outputs will be lost when the container stops!
+
+**Run a simulation (CLI mode)**:
 ```bash
 docker run --rm \
   -v $(pwd)/output:/app/a3dshell/output \
   -v $(pwd)/cache:/app/a3dshell/cache \
   -v $(pwd)/config:/app/a3dshell/config \
   ghcr.io/frischho/a3dshell:latest \
-  python -m src.cli --config config/example_quick_test.ini
-```
-
-**Using docker-compose** (easier):
-```bash
-# Download docker-compose.registry.yml from the repo
-wget https://raw.githubusercontent.com/frischho/a3dshell/main/docker/docker-compose.registry.yml
-
-# Start GUI
-docker-compose -f docker-compose.registry.yml up
-
-# Or run CLI
-docker-compose -f docker-compose.registry.yml run --rm a3dshell \
   python -m src.cli --config config/example_quick_test.ini
 ```
 
@@ -172,7 +216,8 @@ Then open your browser to **http://localhost:8501**
 #### GUI Features:
 - 📋 **Easy Configuration**: Fill forms instead of editing INI files
 - 💾 **Save/Load**: Save configurations and reload them later
-- 📍 **ROI Options**: Bounding box or shapefile support
+- 📍 **ROI Options**: Bounding box, shapefile, or **draw on interactive map**
+- 🗺️ **Interactive Map**: Draw ROI rectangles on Swisstopo maps
 - ▶️ **Run Simulations**: Execute directly from the browser
 - 📊 **Live Output**: Real-time progress and logs
 - 🏔️ **No CLI Knowledge Needed**: Point and click interface
@@ -180,9 +225,18 @@ Then open your browser to **http://localhost:8501**
 #### Using the GUI:
 
 1. **General Settings Tab**: Set simulation name, dates, coordinate system
-2. **Location & ROI Tab**: Define point of interest and region
+2. **Location & ROI Tab**:
+   - Define region using bounding box, existing shapefile, or **draw on interactive map**
+   - Optionally specify point of interest
 3. **Output Settings Tab**: Configure grid spacing, DEM resolution, land use
 4. **Run Tab**: Review settings, save config, and run simulation
+
+**Drawing ROI on Map:**
+1. Select "Use custom shapefile for ROI"
+2. Choose "🗺️ Draw on interactive map"
+3. Use the rectangle tool (□) to draw your bounding box on the map
+4. Click "💾 Save ROI" to export as shapefile
+5. Shapefile automatically saved to `config/shapefiles/`
 
 **Tips:**
 - Load existing configs from sidebar dropdown
@@ -217,7 +271,7 @@ NORTH_epsg2056 = 189500
 altLV95 = 1560
 USE_SHP_ROI = false
 ROI = 1000
-BUFFERSIZE = 50000
+BUFFERSIZE = 10000
 
 [OUTPUT]
 OUT_COORDSYS = CH1903+
@@ -476,6 +530,12 @@ The tool automatically caches downloaded data:
 
 ### GUI Issues
 
+**⚠️ Important: Always use `http://localhost:8501` not `http://0.0.0.0:8501`**
+
+The address `0.0.0.0` is for server binding and cannot be accessed from a browser. Always use:
+- `http://localhost:8501`
+- or `http://127.0.0.1:8501`
+
 **GUI won't start:**
 ```bash
 pip install --upgrade streamlit
@@ -486,6 +546,20 @@ pip install --upgrade streamlit
 streamlit run gui_app.py --server.port 8502
 # or with Docker:
 docker run -p 8502:8501 ... ghcr.io/frischho/a3dshell:latest
+```
+
+**Blank screen or GUI not loading:**
+```bash
+# Try rebuilding the Docker image
+docker-compose build --no-cache
+docker-compose up
+
+# Or if using registry image, pull latest
+docker-compose -f docker-compose.registry.yml pull
+docker-compose -f docker-compose.registry.yml up
+
+# Check browser console for errors (F12 in most browsers)
+# Try accessing: http://localhost:8501/_stcore/health
 ```
 
 **Can't find config files:**
@@ -575,6 +649,20 @@ The Docker image contains:
 - ✅ All input data (BRDF files, templates, IMIS metadata)
 - ✅ GUI and CLI ready to use
 - ✅ Complete environment (~1.2 GB)
+- ✅ **Version tracking**: Each image includes BUILD_INFO.txt with exact MeteoIO/Snowpack commit hashes for reproducibility
+
+### Version Information
+
+To check which versions of MeteoIO and Snowpack are included in your Docker image:
+
+```bash
+# View build information
+docker run --rm ghcr.io/frischho/a3dshell:v1.0.0 cat BUILD_INFO.txt
+
+# Or via the GUI: Open http://localhost:8501 → Check sidebar "About" section
+```
+
+This ensures scientific reproducibility by tracking the exact source code versions used to build MeteoIO and Snowpack.
 
 ### Volume Mounts
 
@@ -582,6 +670,43 @@ Three directories should be mounted for persistence:
 - `./output` → `/app/a3dshell/output` - Simulation results
 - `./cache` → `/app/a3dshell/cache` - Downloaded data cache
 - `./config` → `/app/a3dshell/config` - Configuration files
+
+**Shapefile Storage:**
+
+When using custom shapefiles for ROI definition, they **must be stored in a mounted volume**. The recommended approach:
+
+1. **Store in `config/` directory** (already mounted):
+   ```bash
+   # Place your shapefiles here
+   a3dshell/
+   ├── config/
+   │   ├── my_roi.shp
+   │   ├── my_roi.shx
+   │   ├── my_roi.dbf
+   │   ├── my_roi.prj
+   │   └── example_quick_test.ini
+   ```
+
+2. **Or create a dedicated `shapefiles/` directory**:
+   ```bash
+   # Create shapefiles directory
+   mkdir -p shapefiles
+
+   # Add volume mount to docker run command
+   docker run --rm -p 8501:8501 \
+     -v $(pwd)/output:/app/a3dshell/output \
+     -v $(pwd)/cache:/app/a3dshell/cache \
+     -v $(pwd)/config:/app/a3dshell/config \
+     -v $(pwd)/shapefiles:/app/a3dshell/shapefiles:ro \
+     ghcr.io/frischho/a3dshell:latest
+   ```
+
+3. **In the GUI**:
+   - The shapefile browser will search the directory you specify (default: `config/`)
+   - Only files in mounted volumes are accessible
+   - Files outside mounted volumes cannot be read by the container
+
+**Important**: Shapefiles consist of multiple files (`.shp`, `.shx`, `.dbf`, `.prj`). Make sure all components are in the same directory!
 
 ### Docker Compose
 
@@ -716,12 +841,26 @@ docker run --rm \
 
 The following features are planned for future releases:
 
+### Interactive Map for ROI Drawing ✅ **IMPLEMENTED**
+Draw your Region of Interest directly on an interactive Swiss map:
+- **Feature**: Draw rectangular bounding boxes on Swisstopo maps
+- **How it works**:
+  - Select "Use custom shapefile" in GUI
+  - Choose "Draw on interactive map" option
+  - View Swiss topographic map
+  - Draw ROI rectangle with drawing tool
+  - Save as shapefile with one click
+  - Automatic coordinate transformation to EPSG:2056
+- **Technology**: Streamlit-Folium with Swisstopo WMS layers
+- **Status**: ✅ **Available now** - Use in GUI Location & ROI tab
+- **Details**: See `docs/INTERACTIVE_MAP_FEATURE.md` for technical specification
+
 ### SwissTLMRegio Land Use Integration
-Automatic download and processing of Swiss topographic land use data (SwissTLMRegio):
+Automatic download and processing of Swiss topographic land use data:
 - Seamless integration with Swisstopo API
 - Automatic conversion to PREVAH land use codes
 - Support for custom mapping tables
-- **Status**: Not yet implemented
+- **Status**: Planned
 - **Current workaround**: Use constant land use value (`USE_LUS_TLM = false`)
 
 ### Additional Planned Features
@@ -729,6 +868,7 @@ Automatic download and processing of Swiss topographic land use data (SwissTLMRe
 - Enhanced visualization and mapping options
 - Batch processing for multiple simulations
 - Integration with additional meteorological data sources
+- QGIS plugin for A3DShell integration
 
 Contributions and feature requests are welcome!
 

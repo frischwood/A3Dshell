@@ -31,5 +31,9 @@ jinja2>=3.0.0
 # GUI (Streamlit)
 streamlit>=1.28.0
 
+# Interactive mapping for ROI drawing
+folium>=0.14.0
+streamlit-folium>=0.15.0
+
 # Configuration parsing (standard library, but listed for clarity)
 # configparser (standard library)

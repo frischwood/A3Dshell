@@ -24,6 +24,7 @@ ENV/
 # Data files
 input/
 cache/
+config/shapefiles/
 
 # Outputs (don't commit simulation results)
 output/*/

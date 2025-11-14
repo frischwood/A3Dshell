@@ -24,6 +24,7 @@ test_*.py
 IMPLEMENTATION_STATUS.md
 COMPLETION_SUMMARY.md
 
+
 # Don't copy temporary files
 *.log
 *.tmp
