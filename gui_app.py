@@ -64,8 +64,202 @@ def find_shapefiles(base_dir):
         # Find all .shp files recursively
         shapefiles = sorted(base_path.rglob("*.shp"))
         return shapefiles
-    except Exception as e:
+    except Exception:
         return []
+
+@st.cache_data(ttl=3600)
+def get_swiss_boundary_polygon():
+    """
+    Fetch or create Swiss boundary polygon for validation.
+
+    First attempts to fetch from Swisstopo REST API.
+    Falls back to simplified boundary polygon if API unavailable.
+
+    Returns:
+        shapely.Polygon: Swiss boundary in EPSG:2056, or None if all methods fail
+    """
+    try:
+        import requests
+        from shapely.geometry import Polygon
+
+        # Try Swisstopo REST API for height service (includes boundary query)
+        # Alternative: Use a pre-simplified boundary polygon
+        url = "https://api3.geo.admin.ch/rest/services/api/MapServer/identify?geometry=2660000,1185000&geometryType=esriGeometryPoint&layers=all:ch.swisstopo.swissboundaries3d-land-flaeche.fill&returnGeometry=true&sr=2056"
+
+        response = requests.get(url, timeout=5)
+
+        if response.status_code == 200:
+            data = response.json()
+            if 'results' in data and len(data['results']) > 0:
+                # Extract geometry if available
+                for result in data['results']:
+                    if 'geometry' in result and 'rings' in result['geometry']:
+                        rings = result['geometry']['rings']
+                        if rings and len(rings) > 0:
+                            # Create polygon from rings
+                            from shapely.geometry import Polygon
+                            polygon = Polygon(rings[0])
+                            return polygon
+
+        # Fallback: Use simplified Swiss boundary (approximate)
+        # This is a generalized version for validation purposes
+        # Coordinates in EPSG:2056 (Swiss LV95)
+        simplified_coords = [
+            (2485000, 1075000),  # SW corner
+            (2485000, 1110000),
+            (2490000, 1145000),  # West (Geneva area)
+            (2495000, 1185000),
+            (2510000, 1230000),
+            (2525000, 1265000),  # NW
+            (2570000, 1295000),  # North
+            (2630000, 1296000),
+            (2720000, 1295000),  # NE (Rhine valley)
+            (2795000, 1280000),
+            (2834000, 1255000),  # East (Grisons)
+            (2830000, 1220000),
+            (2815000, 1185000),
+            (2785000, 1150000),  # SE
+            (2750000, 1110000),
+            (2715000, 1085000),  # Ticino
+            (2680000, 1080000),
+            (2630000, 1085000),
+            (2580000, 1095000),
+            (2530000, 1085000),
+            (2490000, 1078000),  # South
+            (2485000, 1075000),  # Close polygon
+        ]
+
+        polygon = Polygon(simplified_coords)
+        return polygon
+
+    except Exception:
+        return None
+
+def check_swiss_boundaries(x, y, roi_size=None):
+    """
+    Check if coordinates (and optional ROI) are within Swiss boundaries (EPSG:2056).
+
+    Uses official Swiss boundary polygon from Swisstopo.
+
+    Args:
+        x: Easting coordinate (EPSG:2056)
+        y: Northing coordinate (EPSG:2056)
+        roi_size: Optional ROI size in meters (for bounding box check)
+
+    Returns:
+        tuple: (is_valid: bool, message: str)
+    """
+    try:
+        from shapely.geometry import Point, box
+
+        # Get Swiss boundary polygon
+        swiss_boundary = get_swiss_boundary_polygon()
+
+        if swiss_boundary is None:
+            # Fallback to bounding box check if API fails
+            SWISS_MIN_E = 2485000
+            SWISS_MAX_E = 2834000
+            SWISS_MIN_N = 1075000
+            SWISS_MAX_N = 1296000
+
+            if not (SWISS_MIN_E <= x <= SWISS_MAX_E and SWISS_MIN_N <= y <= SWISS_MAX_N):
+                return False, f"⚠️ Point ({x:.0f}, {y:.0f}) appears outside Swiss boundaries"
+
+            if roi_size:
+                half_size = roi_size / 2
+                min_x, max_x = x - half_size, x + half_size
+                min_y, max_y = y - half_size, y + half_size
+
+                if not (SWISS_MIN_E <= min_x and max_x <= SWISS_MAX_E and
+                       SWISS_MIN_N <= min_y and max_y <= SWISS_MAX_N):
+                    return False, f"⚠️ ROI extends outside Swiss boundaries. Reduce ROI size or move center point."
+
+            return True, "✅ Within Swiss boundaries"
+
+        # Use actual Swiss boundary polygon
+        point = Point(x, y)
+
+        # Check if point is within Switzerland
+        if not swiss_boundary.contains(point):
+            return False, f"⚠️ Point ({x:.0f}, {y:.0f}) is outside Switzerland"
+
+        # If ROI size provided, check if entire bounding box fits within Switzerland
+        if roi_size:
+            half_size = roi_size / 2
+            roi_box = box(x - half_size, y - half_size, x + half_size, y + half_size)
+
+            # Check if ROI box is fully within Switzerland
+            if not swiss_boundary.contains(roi_box):
+                return False, f"⚠️ ROI extends outside Switzerland. Reduce ROI size or move center point."
+
+        return True, "✅ Within Switzerland"
+
+    except Exception:
+        # If anything fails, allow it (better than blocking)
+        return True, "⚠️ Could not validate boundaries"
+
+def check_polygon_in_swiss_boundaries(geojson_geometry):
+    """
+    Check if a drawn polygon is within Swiss boundaries.
+
+    Uses official Swiss boundary polygon from Swisstopo.
+
+    Args:
+        geojson_geometry: GeoJSON geometry object (in WGS84)
+
+    Returns:
+        tuple: (is_valid: bool, message: str)
+    """
+    try:
+        from shapely.geometry import shape as shapely_shape
+        import geopandas as gpd
+
+        # Convert GeoJSON to shapely geometry (WGS84)
+        geom_wgs84 = shapely_shape(geojson_geometry)
+
+        # Transform to Swiss LV95
+        gdf = gpd.GeoDataFrame([{'geometry': geom_wgs84}], crs='EPSG:4326')
+        gdf_lv95 = gdf.to_crs('EPSG:2056')
+        geom_lv95 = gdf_lv95.geometry.iloc[0]
+
+        # Get Swiss boundary polygon
+        swiss_boundary = get_swiss_boundary_polygon()
+
+        if swiss_boundary is None:
+            # Fallback to bounding box check if polygon unavailable
+            SWISS_MIN_E = 2485000
+            SWISS_MAX_E = 2834000
+            SWISS_MIN_N = 1075000
+            SWISS_MAX_N = 1296000
+
+            minx, miny, maxx, maxy = geom_lv95.bounds
+
+            if minx < SWISS_MIN_E or maxx > SWISS_MAX_E:
+                return False, f"⚠️ Drawn ROI extends outside Swiss boundaries (East-West). Please redraw within Switzerland."
+
+            if miny < SWISS_MIN_N or maxy > SWISS_MAX_N:
+                return False, f"⚠️ Drawn ROI extends outside Swiss boundaries (North-South). Please redraw within Switzerland."
+
+            return True, "✅ ROI within Swiss boundaries (bounding box check)"
+
+        # Use actual Swiss boundary polygon
+        # Check if drawn geometry is fully within Switzerland
+        # Using .contains() checks if the ENTIRE geometry (including edges) is within the boundary
+        if not swiss_boundary.contains(geom_lv95):
+            # Additional check: does the drawn polygon intersect but not fully contained?
+            if swiss_boundary.intersects(geom_lv95):
+                return False, f"⚠️ Drawn ROI crosses Swiss border. Part of the ROI is outside Switzerland. Please redraw within Swiss borders."
+            else:
+                return False, f"⚠️ Drawn ROI is completely outside Switzerland. Please redraw within Swiss borders."
+
+        return True, "✅ ROI within Switzerland (boundary polygon check)"
+
+    except Exception as e:
+        # Log the error for debugging
+        import streamlit as st
+        st.warning(f"⚠️ Boundary validation error: {str(e)}")
+        # Fail safe: reject if validation fails
+        return False, f"❌ Could not validate boundaries (error: {str(e)}). Please check your ROI."
 
 def create_roi_map(center_lat=46.8, center_lon=8.2, zoom=8):
     """
@@ -153,8 +347,8 @@ def save_drawn_roi(geojson_data, output_path):
 
 
 # Title
-st.title("🏔️ A3DShell Simulation Setup")
-st.markdown("Configure and run Alpine3D simulation setups")
+st.title("A3DShell")
+st.markdown("Configure Alpine3D simulation setups")
 
 # Sidebar for existing configs
 st.sidebar.header("📁 Load Existing Config")
@@ -182,6 +376,10 @@ else:
 # Initialize session state
 if 'config' not in st.session_state:
     st.session_state.config = {}
+
+# Initialize ROI validation state
+if 'roi_validated' not in st.session_state:
+    st.session_state['roi_validated'] = False
 
 # Load selected config
 if selected_config != "Create New":
@@ -214,7 +412,7 @@ if selected_config != "Create New":
         st.session_state.config['lus_cst'] = parser.get("A3D", "LUS_PREVAH_CST", fallback="11500")
 
 # Tabs for configuration sections
-tab1, tab2, tab3, tab4 = st.tabs(["📋 General", "📍 Location & ROI", "🗺️ Output", "▶️ Run"])
+tab1, tab2, tab3, tab4 = st.tabs(["1. General", "2. Location & ROI", "3. Output", "4. Run ▶️"])
 
 # ============================================================
 # Tab 1: General Settings
@@ -327,6 +525,13 @@ with tab2:
                 help="Path to .shp file (must be in a mounted volume: config/, shapefiles/, etc.)"
             )
 
+            # Mark as validated if user provided a shapefile path (we trust existing shapefiles)
+            if roi_shapefile:
+                st.session_state['roi_validated'] = True
+                st.info(f"📍 Using shapefile: `{roi_shapefile}`")
+            else:
+                st.session_state['roi_validated'] = False
+
             # Info message about Docker volumes
             st.caption("💡 **Docker users**: Shapefiles must be in mounted volumes (e.g., `config/`, `shapefiles/`). See README for details.")
         else:
@@ -345,38 +550,170 @@ with tab2:
             if map_output and map_output.get('last_active_drawing'):
                 drawn_geom = map_output['last_active_drawing']
 
-                st.success("✅ Polygon drawn! Click button below to save as shapefile.")
+                # Debug: Show what was captured
+                with st.expander("🔍 Debug: View captured geometry", expanded=False):
+                    st.json(drawn_geom)
 
-                # Input for shapefile name
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    shapefile_name = st.text_input(
-                        "Shapefile name",
-                        value="roi_drawn",
-                        help="Name for the shapefile (without .shp extension)"
-                    )
-                with col2:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    save_button = st.button("💾 Save ROI", type="primary")
+                # Validate polygon is within Swiss boundaries
+                is_valid, boundary_msg = check_polygon_in_swiss_boundaries(drawn_geom['geometry'])
 
-                if save_button and shapefile_name:
-                    # Save shapefile
-                    shapefile_dir = Path("config/shapefiles")
-                    shapefile_path = shapefile_dir / f"{shapefile_name}.shp"
+                if is_valid:
+                    st.success("✅ Polygon drawn! Click button below to save as shapefile.")
+                    st.info(boundary_msg)
 
-                    success, message = save_drawn_roi(drawn_geom, str(shapefile_path))
-                    if success:
-                        st.success(message)
-                        roi_shapefile = str(shapefile_path)
-                        st.session_state.config['roi_shapefile'] = str(shapefile_path)
-                        st.info(f"📍 Shapefile path set to: `{roi_shapefile}`")
-                    else:
-                        st.error(message)
+                    # Input for shapefile name
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        shapefile_name = st.text_input(
+                            "Shapefile name",
+                            value="roi_drawn",
+                            help="Name for the shapefile (without .shp extension)"
+                        )
+                    with col2:
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        save_button = st.button("💾 Save ROI", type="primary")
+
+                    if save_button and shapefile_name:
+                        # Save shapefile
+                        shapefile_dir = Path("config/shapefiles")
+                        shapefile_path = shapefile_dir / f"{shapefile_name}.shp"
+
+                        success, message = save_drawn_roi(drawn_geom, str(shapefile_path))
+                        if success:
+                            st.success(message)
+                            roi_shapefile = str(shapefile_path)
+                            st.session_state.config['roi_shapefile'] = str(shapefile_path)
+                            st.info(f"📍 Shapefile path set to: `{roi_shapefile}`")
+                            # Mark ROI as validated (polygon was already validated above)
+                            st.session_state['roi_validated'] = True
+                        else:
+                            st.error(message)
+                            st.session_state['roi_validated'] = False
+                else:
+                    # Polygon outside boundaries - show error and prevent saving
+                    st.error(boundary_msg)
+                    st.warning("🚫 Cannot save ROI outside Swiss boundaries. Please redraw within Switzerland.")
+                    st.session_state['roi_validated'] = False
             else:
                 # Show warning if no polygon drawn yet
                 if not roi_shapefile:
                     st.warning("⚠️ No polygon drawn yet. Use the drawing tools on the map.")
     else:
+        # Bounding box mode - need center point coordinates
+        st.markdown("### 📍 ROI Center Point")
+
+        # Option to pick point on map or enter manually
+        center_point_option = st.radio(
+            "How to define center point:",
+            ["⌨️ Enter coordinates manually", "🗺️ Pick on map"],
+            horizontal=True
+        )
+
+        if center_point_option == "🗺️ Pick on map":
+            st.info("**Instructions**: Click anywhere on the map to select the ROI center point.")
+
+            # Create map for point selection
+            center_map = folium.Map(
+                location=[46.8, 8.2],
+                zoom_start=8,
+                tiles=None
+            )
+
+            # Add Swisstopo base layer
+            folium.raster_layers.WmsTileLayer(
+                url='https://wms.geo.admin.ch/',
+                layers='ch.swisstopo.pixelkarte-farbe',
+                fmt='image/png',
+                transparent=False,
+                name='Swisstopo Map',
+                overlay=False,
+                control=True,
+                attr='© swisstopo'
+            ).add_to(center_map)
+
+            # Add click listener for coordinates
+            center_map.add_child(folium.LatLngPopup())
+
+            # Display map and capture clicks
+            center_map_output = st_folium(center_map, width=800, height=400, key="center_point_map")
+
+            # Extract coordinates from map click
+            if center_map_output and center_map_output.get('last_clicked'):
+                lat = center_map_output['last_clicked']['lat']
+                lon = center_map_output['last_clicked']['lng']
+
+                # Transform WGS84 to Swiss LV95
+                transformer = Transformer.from_crs("EPSG:4326", "EPSG:2056", always_xy=True)
+                poi_x, poi_y = transformer.transform(lon, lat)
+
+                # Fetch elevation from Swisstopo Height API
+                try:
+                    import requests
+                    height_url = f"https://api3.geo.admin.ch/rest/services/height?easting={poi_x:.1f}&northing={poi_y:.1f}&sr=2056"
+                    response = requests.get(height_url, timeout=5)
+
+                    if response.status_code == 200:
+                        height_data = response.json()
+                        poi_z = float(height_data.get('height', 1500))
+                        st.success(f"✅ Point selected: {poi_x:.1f}, {poi_y:.1f} | Elevation: {poi_z:.1f}m")
+                    else:
+                        # Fallback if API fails
+                        poi_z = float(st.session_state.config.get('poi_z', 1500))
+                        st.warning(f"⚠️ Point selected: {poi_x:.1f}, {poi_y:.1f} | Using default elevation (API unavailable)")
+                except Exception:
+                    # Fallback if request fails
+                    poi_z = float(st.session_state.config.get('poi_z', 1500))
+                    st.success(f"✅ Point selected: {poi_x:.1f}, {poi_y:.1f} | Using default elevation")
+            else:
+                # Use defaults
+                poi_x = float(st.session_state.config.get('poi_x', 645000))
+                poi_y = float(st.session_state.config.get('poi_y', 115000))
+                poi_z = float(st.session_state.config.get('poi_z', 1500))
+
+            # Show coordinates (read-only display)
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Easting (EPSG:2056)", f"{poi_x:.1f}")
+            with col2:
+                st.metric("Northing (EPSG:2056)", f"{poi_y:.1f}")
+
+            # Allow altitude adjustment
+            poi_z = st.number_input(
+                "Altitude (m)",
+                value=float(poi_z),
+                format="%.1f",
+                help="Adjust altitude of center point if needed"
+            )
+
+        else:
+            # Manual coordinate entry
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                poi_x = st.number_input(
+                    "Easting (EPSG:2056 or CH1903)",
+                    value=float(st.session_state.config.get('poi_x', 645000)),
+                    format="%.1f",
+                    help="X coordinate of ROI center (auto-converts CH1903 to EPSG:2056)"
+                )
+
+            with col2:
+                poi_y = st.number_input(
+                    "Northing (EPSG:2056 or CH1903)",
+                    value=float(st.session_state.config.get('poi_y', 115000)),
+                    format="%.1f",
+                    help="Y coordinate of ROI center (auto-converts CH1903 to EPSG:2056)"
+                )
+
+            with col3:
+                poi_z = st.number_input(
+                    "Altitude (m)",
+                    value=float(st.session_state.config.get('poi_z', 1500)),
+                    format="%.1f",
+                    help="Altitude of ROI center point"
+                )
+
+        # ROI size (applies to both map and manual entry)
         roi_size = st.number_input(
             "ROI Size (meters)",
             value=int(st.session_state.config.get('roi_size', 1000)),
@@ -386,6 +723,18 @@ with tab2:
             help="Size of bounding box around center point"
         )
 
+        # Validate ROI is within Swiss boundaries
+        is_valid, boundary_msg = check_swiss_boundaries(poi_x, poi_y, roi_size)
+
+        if is_valid:
+            st.success(boundary_msg)
+            st.session_state['roi_validated'] = True
+        else:
+            st.error(boundary_msg)
+            st.warning("⚠️ Please adjust the center point or reduce the ROI size to fit within Switzerland.")
+            st.session_state['roi_validated'] = False
+
+    # Buffer size applies to both shapefile and bounding box modes
     buffer_size = st.number_input(
         "Buffer Size for IMIS Stations (meters)",
         value=int(st.session_state.config.get('buffer_size', 10000)),
@@ -395,46 +744,12 @@ with tab2:
         help="Distance to search for meteorological stations"
     )
 
-    st.divider()
-    st.header("Point of Interest (POI) - Optional")
-
-    use_poi = st.checkbox(
-        "Specify Point of Interest",
-        value=st.session_state.config.get('use_poi', False),
-        help="Optional: Specify a specific point for analysis. If disabled, ROI center will be used."
-    )
-
-    if use_poi:
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            poi_x = st.number_input(
-                "Easting (EPSG:2056 or CH1903)",
-                value=float(st.session_state.config.get('poi_x', 645000)),
-                format="%.1f",
-                help="X coordinate (auto-converts CH1903 to EPSG:2056)"
-            )
-
-        with col2:
-            poi_y = st.number_input(
-                "Northing (EPSG:2056 or CH1903)",
-                value=float(st.session_state.config.get('poi_y', 115000)),
-                format="%.1f",
-                help="Y coordinate (auto-converts CH1903 to EPSG:2056)"
-            )
-
-        with col3:
-            poi_z = st.number_input(
-                "Altitude (m)",
-                value=float(st.session_state.config.get('poi_z', 1500)),
-                format="%.1f"
-            )
-    else:
-        # Use default values when POI is not specified
+    # When using shapefile, POI is derived from ROI center (no manual input needed)
+    if use_shapefile:
+        # Set default POI values (will be overridden by backend from shapefile)
         poi_x = float(st.session_state.config.get('poi_x', 645000))
         poi_y = float(st.session_state.config.get('poi_y', 115000))
         poi_z = float(st.session_state.config.get('poi_z', 1500))
-        st.info("ℹ️ POI will be automatically set to ROI center during simulation.")
 
 # ============================================================
 # Tab 3: Output Settings
@@ -570,7 +885,7 @@ USE_LUS_TLM = {'true' if use_lus_tlm else 'false'}
 
             config_content += """DO_PVP_3D = false
 PVP_3D_FMT = vtu
-SP_BIN_PATH = input/bin/snowpack
+SP_BIN_PATH = snowpack
 """
 
             # Save file
@@ -600,7 +915,16 @@ SP_BIN_PATH = input/bin/snowpack
         st.write("")  # Spacing
         st.write("")  # Spacing
 
-    if st.button("▶️ Start Simulation", type="primary", use_container_width=True):
+    # Check if ROI is validated
+    roi_validated = st.session_state.get('roi_validated', False)
+
+    # Show validation status
+    if not roi_validated:
+        st.error("🚫 Cannot run simulation: ROI/POI must be confirmed within Swiss boundaries")
+        st.info("💡 Go to the **Location & ROI** tab to configure and validate your region of interest.")
+
+    # Disable button if validation failed
+    if st.button("▶️ Start Simulation", type="primary", use_container_width=True, disabled=not roi_validated):
         if not simu_name:
             st.error("Please provide a simulation name")
         else:
@@ -647,7 +971,7 @@ USE_LUS_TLM = {'true' if use_lus_tlm else 'false'}
 
             config_content += """DO_PVP_3D = false
 PVP_3D_FMT = vtu
-SP_BIN_PATH = input/bin/snowpack
+SP_BIN_PATH = snowpack
 """
 
             # Save temp config
@@ -683,7 +1007,7 @@ SP_BIN_PATH = input/bin/snowpack
 
                     if result.returncode == 0:
                         st.success("✅ Simulation completed successfully!")
-                        st.balloons()
+                        st.snow()
 
                         # Show output location
                         output_dir = Path("output") / simu_name
@@ -708,7 +1032,19 @@ SP_BIN_PATH = input/bin/snowpack
 # Footer
 st.divider()
 st.markdown("""
-<div style='text-align: center; color: #666;'>
-A3DShell refactored_v2 | Alpine3D Simulation Setup Tool
+<div style='text-align: center; color: #666; font-size: 0.9em;'>
+    <p style='margin-bottom: 5px;'><strong>A3DShell</strong> </p>
+    <p style='margin: 5px 0;'>
+        <a href='https://github.com/frischwood/A3Dshell' target='_blank' style='color: #0366d6; text-decoration: none;'>
+            GitHub Repository
+        </a>
+        &nbsp;|&nbsp;
+        <a href='https://github.com/frischwood/A3Dshell/blob/main/LICENSE' target='_blank' style='color: #0366d6; text-decoration: none;'>
+            MIT License
+        </a>
+    </p>
+    <p style='margin-top: 5px; font-size: 0.85em;'>
+        © 2025 A3DShell Contributors | Open Source Software
+    </p>
 </div>
 """, unsafe_allow_html=True)
