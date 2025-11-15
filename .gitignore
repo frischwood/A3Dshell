@@ -96,6 +96,8 @@ GUI_README*
 QUICKSTART.md
 BUILD_NOTES.md
 DOCKER.md
+PUBLISHING.md
+COMMIT_CHECKLIST.md
 
 copy_input_files.sh
 
