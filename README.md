@@ -6,18 +6,17 @@ A clean, user-friendly tool for setting up Alpine3D simulation environments.
 
 A3DShell automates the preparation of Alpine3D simulation inputs:
 - Downloads and processes DEM data from Swisstopo
-- Generates land use grids from SwissTLMRegio
 - Selects appropriate IMIS meteorological stations
-- Runs Snowpack preprocessing to generate SMET files
+- Prepares input meteo SMET files
 - Packages everything into a ready-to-use Alpine3D simulation folder
 
 **Key Features:**
-- 🖥️ **Dual Interface**: Web GUI for easy use, CLI for power users
-- 📦 **Docker Ready**: Pre-built images - no installation needed
-- 📍 **Flexible ROI**: Bounding box or custom shapefile support
-- 💾 **Smart Caching**: Avoid redundant downloads
-- 🎯 **INI Configuration**: Easy configuration file management
-- 📤 **Auto Packaging**: Everything zipped and ready to go
+- **Dual Interface**: Web GUI for easy use, CLI for power users
+- **Docker Ready**: Pre-built images - no installation needed
+- **Flexible ROI**: Bounding box or custom shapefile support
+- **Smart Caching**: Avoid redundant downloads
+- **INI Configuration**: Easy configuration file management
+- **Auto Packaging**: Everything zipped and ready to go
 
 ## Installation
 
@@ -136,8 +135,8 @@ A3DShell requires **MeteoIO** and **Snowpack** for meteorological data processin
   - ⚠️ **Requires WSL/SLF VPN access** to connect to the database
   - Used to retrieve real-world meteorological data for your simulation area
 
-- **Snowpack**: Converts reflected shortwave radiation to incoming shortwave radiation
-  - Runs preprocessing to generate SMET files from IMIS data
+- **Snowpack**: Converts IMIS reflected shortwave radiation measurements to incoming shortwave radiation
+  - Runs preprocessing to generate A3D-ready input SMET files from IMIS data
   - Can be skipped if you have your own meteorological files (see Configuration below)
 
 **Installation:**
@@ -210,16 +209,7 @@ streamlit run gui_app.py
 
 Then open your browser to **http://localhost:8501**
 
-#### GUI Features:
-- 📋 **Easy Configuration**: Fill forms instead of editing INI files
-- 💾 **Save/Load**: Save configurations and reload them later
-- 📍 **ROI Options**: Bounding box, shapefile, or **draw on interactive map**
-- 🗺️ **Interactive Map**: Draw ROI rectangles on Swisstopo maps
-- ▶️ **Run Simulations**: Execute directly from the browser
-- 📊 **Live Output**: Real-time progress and logs
-- 🏔️ **No CLI Knowledge Needed**: Point and click interface
-
-#### Using the GUI:
+#### GUI content:
 
 1. **General Settings Tab**: Set simulation name, dates, coordinate system
 2. **Location & ROI Tab**:
@@ -457,13 +447,13 @@ USE_LUS_TLM = true  # Not yet implemented
 ```
 Automatic download of Swiss topographic land use data - coming in future release.
 
-### Advanced Options
+<!-- ### Advanced Options
 
 - `BUFFERSIZE`: Distance for IMIS station selection (meters)
 - `PLOT_HORIZON`: Generate horizon plots
 - `USE_GROUNDEYE`: Use BRDF model
 - `DO_PVP_3D`: Generate PV panel meshes
-- `SP_BIN_PATH`: Path to Snowpack binary
+- `SP_BIN_PATH`: Path to Snowpack binary -->
 
 ## Command-Line Reference
 
@@ -559,10 +549,10 @@ docker-compose -f docker-compose.registry.yml up
 # Try accessing: http://localhost:8501/_stcore/health
 ```
 
-**Can't find config files:**
+<!-- **Can't find config files:**
 - Ensure you're in the correct directory
 - Configs should be in `config/` folder
-- With Docker, make sure volumes are mounted correctly
+- With Docker, make sure volumes are mounted correctly -->
 
 ### CLI Issues
 
@@ -576,11 +566,12 @@ python -m src.cli --config simulation.ini
 **Missing Dependencies:**
 ```bash
 pip install -r requirements.txt
-# or for conda:
-conda install -c conda-forge geopandas rasterio pyproj
-```
 
-### Common Problems
+```
+<!-- # or for conda:
+ conda install -c conda-forge geopandas rasterio pyproj -->
+
+<!-- ### Common Problems
 
 **Shapefile Not Found:**
 - Use absolute paths: `/full/path/to/roi.shp`
@@ -600,7 +591,7 @@ conda install -c conda-forge geopandas rasterio pyproj
 **Out of Memory:**
 - Reduce ROI size
 - Increase GSD (coarser resolution)
-- Close other applications
+- Close other applications -->
 
 ### Docker-Specific Issues
 
@@ -668,7 +659,7 @@ Three directories should be mounted for persistence:
 - `./cache` → `/app/a3dshell/cache` - Downloaded data cache
 - `./config` → `/app/a3dshell/config` - Configuration files
 
-**Shapefile Storage:**
+<!-- **Shapefile Storage:**
 
 When using custom shapefiles for ROI definition, they **must be stored in a mounted volume**. The recommended approach:
 
@@ -703,9 +694,9 @@ When using custom shapefiles for ROI definition, they **must be stored in a moun
    - Only files in mounted volumes are accessible
    - Files outside mounted volumes cannot be read by the container
 
-**Important**: Shapefiles consist of multiple files (`.shp`, `.shx`, `.dbf`, `.prj`). Make sure all components are in the same directory!
+**Important**: Shapefiles consist of multiple files (`.shp`, `.shx`, `.dbf`, `.prj`). Make sure all components are in the same directory! -->
 
-### Docker Compose
+<!-- ### Docker Compose
 
 Easier than plain docker commands:
 
@@ -728,7 +719,7 @@ cd docker/
 docker-compose build
 docker-compose up  # GUI
 docker-compose run --rm a3dshell python -m src.cli --config ../config/example_quick_test.ini
-```
+``` -->
 
 ## Directory Structure
 
@@ -769,7 +760,7 @@ a3dshell/
 └── README.md              # This file
 ```
 
-## Example Workflows
+<!-- ## Example Workflows
 
 ### Workflow 1: Quick Test with GUI
 
@@ -824,33 +815,19 @@ docker run --rm \
     --gsd 5 \
     --start 2023-10-01T00:00:00 \
     --end 2023-10-31T23:59:59
-```
+``` -->
 
-## Additional Resources
+<!-- ## Additional Resources
 
 - **Example Configs**: See `config/` directory
 - **Binary Installation**: See `input/bin/README.md`
 - **Docker Maintainer Docs**: See `docker/DOCKER.md`
 - **Quick Start Guide**: See `QUICKSTART.md`
-- **Implementation Details**: See `COMPLETION_SUMMARY.md`
+- **Implementation Details**: See `COMPLETION_SUMMARY.md` -->
 
 ## Future Development
 
 The following features are planned for future releases:
-
-### Interactive Map for ROI Drawing ✅ **IMPLEMENTED**
-Draw your Region of Interest directly on an interactive Swiss map:
-- **Feature**: Draw rectangular bounding boxes on Swisstopo maps
-- **How it works**:
-  - Select "Use custom shapefile" in GUI
-  - Choose "Draw on interactive map" option
-  - View Swiss topographic map
-  - Draw ROI rectangle with drawing tool
-  - Save as shapefile with one click
-  - Automatic coordinate transformation to EPSG:2056
-- **Technology**: Streamlit-Folium with Swisstopo WMS layers
-- **Status**: ✅ **Available now** - Use in GUI Location & ROI tab
-- **Details**: See `docs/INTERACTIVE_MAP_FEATURE.md` for technical specification
 
 ### SwissTLMRegio Land Use Integration
 Automatic download and processing of Swiss topographic land use data:
@@ -862,10 +839,7 @@ Automatic download and processing of Swiss topographic land use data:
 
 ### Additional Planned Features
 - Support for additional DEM sources beyond Swisstopo
-- Enhanced visualization and mapping options
-- Batch processing for multiple simulations
 - Integration with additional meteorological data sources
-- QGIS plugin for A3DShell integration
 
 Contributions and feature requests are welcome!
 
