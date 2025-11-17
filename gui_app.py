@@ -1,8 +1,8 @@
 """
-A3DShell refactored_v2 - Simple GUI
+A3Dshell- Simple GUI
 ====================================
 
-A Streamlit-based GUI for configuring and running A3DShell simulations.
+A Streamlit-based GUI for configuring and running A3Dshell simulations.
 
 Run with: streamlit run gui_app.py
 """
@@ -23,8 +23,7 @@ from pyproj import Transformer
 
 # Page configuration
 st.set_page_config(
-    page_title="A3DShell Simulation Setup",
-    page_icon="🏔️",
+    page_title="A3Dshell Simulation Setup",
     layout="wide"
 )
 
@@ -347,7 +346,7 @@ def save_drawn_roi(geojson_data, output_path):
 
 
 # Title
-st.title("A3DShell")
+st.title("A3Dshell")
 st.markdown("Configure Alpine3D simulation setups")
 
 # Sidebar for existing configs
@@ -412,7 +411,7 @@ if selected_config != "Create New":
         st.session_state.config['lus_cst'] = parser.get("A3D", "LUS_PREVAH_CST", fallback="11500")
 
 # Tabs for configuration sections
-tab1, tab2, tab3, tab4 = st.tabs(["1. General", "2. Location & ROI", "3. Output", "4. Run ▶️"])
+tab1, tab2, tab3, tab4 = st.tabs(["1.General", "2.Location & ROI", "3.Output", "4.Run ▶️"])
 
 # ============================================================
 # Tab 1: General Settings
@@ -462,6 +461,9 @@ with tab1:
     with col2:
         end_date = st.date_input("End Date", value=default_end)
         end_time = st.time_input("End Time", value=default_end.time())
+
+    st.divider()
+    st.info("👉 Continue to the next tab: **2. Location & ROI**")
 
 # ============================================================
 # Tab 2: Location & ROI
@@ -751,6 +753,9 @@ with tab2:
         poi_y = float(st.session_state.config.get('poi_y', 115000))
         poi_z = float(st.session_state.config.get('poi_z', 1500))
 
+    st.divider()
+    st.info("👉 Continue to the next tab: **3. Output**")
+
 # ============================================================
 # Tab 3: Output Settings
 # ============================================================
@@ -795,8 +800,11 @@ with tab3:
         help="Single PREVAH land use code (format: 1LLCD where LL is PREVAH code)"
     )
 
+    st.divider()
+    st.info("👉 Continue to the next tab: **4. Run ▶️**")
+
 # ============================================================
-# Tab 4: Run Simulation
+# Tab 4: Run tool
 # ============================================================
 with tab4:
     st.header("Configuration Summary")
@@ -843,7 +851,7 @@ with tab4:
             st.error("Please provide a config filename")
         else:
             # Create config file
-            config_content = f"""# A3DShell Configuration
+            config_content = f"""# A3Dshell Configuration
 # Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
 [GENERAL]
@@ -898,7 +906,7 @@ SP_BIN_PATH = snowpack
     st.divider()
 
     # Run simulation section
-    st.header("Run Simulation")
+    st.header("Run")
 
     col1, col2 = st.columns([2, 1])
 
@@ -924,14 +932,14 @@ SP_BIN_PATH = snowpack
         st.info("💡 Go to the **Location & ROI** tab to configure and validate your region of interest.")
 
     # Disable button if validation failed
-    if st.button("▶️ Start Simulation", type="primary", use_container_width=True, disabled=not roi_validated):
+    if st.button("▶️ Start Run", type="primary", use_container_width=True, disabled=not roi_validated):
         if not simu_name:
             st.error("Please provide a simulation name")
         else:
             # Create a temporary config for this run
             temp_config = config_dir / f"_temp_{simu_name}.ini"
 
-            config_content = f"""# Temporary A3DShell Configuration
+            config_content = f"""# Temporary A3Dshell Configuration
 [GENERAL]
 SIMULATION_NAME = {simu_name}
 START_DATE = {start_dt.strftime('%Y-%m-%dT%H:%M:%S')}
@@ -1003,10 +1011,10 @@ SP_BIN_PATH = snowpack
 
                     # Display output
                     st.subheader("Output")
-                    st.text_area("Simulation Log", value=result.stdout, height=400)
+                    st.text_area("Run Log", value=result.stdout, height=400)
 
                     if result.returncode == 0:
-                        st.success("✅ Simulation completed successfully!")
+                        st.success("✅ Run completed successfully!")
                         st.snow()
 
                         # Show output location
@@ -1014,13 +1022,13 @@ SP_BIN_PATH = snowpack
                         if output_dir.exists():
                             st.info(f"📁 Output location: {output_dir}")
                     else:
-                        st.error(f"❌ Simulation failed with exit code {result.returncode}")
+                        st.error(f"❌ Run failed with exit code {result.returncode}")
                         if result.stderr:
                             st.error("Error output:")
                             st.code(result.stderr)
 
                 except subprocess.TimeoutExpired:
-                    st.error("⏱️ Simulation timed out (> 1 hour)")
+                    st.error("⏱️ Run timed out (> 1 hour)")
                 except Exception as e:
                     st.error(f"❌ Error running simulation: {str(e)}")
 
@@ -1033,7 +1041,7 @@ SP_BIN_PATH = snowpack
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #666; font-size: 0.9em;'>
-    <p style='margin-bottom: 5px;'><strong>A3DShell</strong> </p>
+    <p style='margin-bottom: 5px;'><strong>A3Dshell</strong> </p>
     <p style='margin: 5px 0;'>
         <a href='https://github.com/frischwood/A3Dshell' target='_blank' style='color: #0366d6; text-decoration: none;'>
             GitHub Repository
@@ -1044,7 +1052,7 @@ st.markdown("""
         </a>
     </p>
     <p style='margin-top: 5px; font-size: 0.85em;'>
-        © 2025 A3DShell Contributors | Open Source Software
+        © 2025 A3Dshell Contributors | Open Source Software
     </p>
 </div>
 """, unsafe_allow_html=True)
