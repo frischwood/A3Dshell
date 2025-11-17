@@ -157,10 +157,15 @@ class OutputPackager:
         meteo_files = list(self.paths.get_simu_meteo_dir().glob("*.smet"))
         sno_files = list(self.paths.get_simu_snowfiles_dir().glob("*.sno"))
 
-        summary = f"""
+        # Generate mode-specific summary
+        if self.config.dem_mode == "swisstopo":
+            # Switzerland mode summary
+            summary = f"""
 {'='*60}
 Simulation Summary: {self.config.simu_name}
 {'='*60}
+
+Mode: Switzerland
 
 Configuration:
   Period: {self.config.start_date} to {self.config.end_date}
@@ -178,6 +183,33 @@ Output:
 Status:
   ✓ Input files prepared
   ✓ Ready for Alpine3D execution
+
+{'='*60}
+"""
+        else:
+            # Other Locations mode summary
+            poi_count = len(self.config.pois) if self.config.pois else 0
+            summary = f"""
+{'='*60}
+Simulation Summary: {self.config.simu_name}
+{'='*60}
+
+Mode: Other Locations (User-Provided Data)
+
+Configuration:
+  DEM: {self.config.user_dem_path}
+  EPSG: {self.config.target_epsg}
+  Coordinate System: {self.config.out_coord_sys}
+  POIs: {poi_count} {'point' if poi_count == 1 else 'points'} defined
+
+Output:
+  Location: {simu_dir}
+  Surface grids: {len(grids_files)} files
+
+Next Steps:
+  1. Add your meteorological SMET files to: {self.paths.get_simu_meteo_dir()}
+  2. Verify DEM conversion (TIF → ASC)
+  3. Configure Alpine3D simulation parameters
 
 {'='*60}
 """

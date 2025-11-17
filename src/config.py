@@ -224,16 +224,23 @@ class ConfigManager:
                 config_dict["poi_y"] = poi_y
                 config_dict["poi_z"] = float(section["altLV95"])
 
-            # ROI settings
-            config_dict["use_shp_roi"] = config.getboolean("INPUT", "USE_SHP_ROI")
-            config_dict["roi_size"] = int(section.get("ROI", "1000"))
-            config_dict["buffer_size"] = int(section.get("BUFFERSIZE", "50000"))
+            # ROI settings (only for Switzerland mode)
+            if "USE_SHP_ROI" in section:
+                config_dict["use_shp_roi"] = config.getboolean("INPUT", "USE_SHP_ROI")
+            else:
+                config_dict["use_shp_roi"] = False
+
+            if "ROI" in section:
+                config_dict["roi_size"] = int(section.get("ROI", "1000"))
+
+            if "BUFFERSIZE" in section:
+                config_dict["buffer_size"] = int(section.get("BUFFERSIZE", "50000"))
 
             # Check for ROI_SHAPEFILE
             if "ROI_SHAPEFILE" in section:
                 config_dict["roi_shapefile"] = section["ROI_SHAPEFILE"]
 
-            # ROI center (for Other Locations bbox mode)
+            # ROI center (for Other Locations bbox mode - deprecated, kept for backwards compatibility)
             if "ROI_CENTER_X" in section:
                 config_dict["roi_center_x"] = float(section["ROI_CENTER_X"])
             if "ROI_CENTER_Y" in section:
@@ -260,8 +267,13 @@ class ConfigManager:
         if "OUTPUT" in config:
             section = config["OUTPUT"]
             config_dict["out_coord_sys"] = section["OUT_COORDSYS"]
-            config_dict["gsd"] = float(section["GSD"])
-            config_dict["gsd_ref"] = float(section["GSD_ref"])
+
+            # GSD and GSD_ref are optional (not used in Other Locations mode)
+            if "GSD" in section:
+                config_dict["gsd"] = float(section["GSD"])
+            if "GSD_ref" in section:
+                config_dict["gsd_ref"] = float(section["GSD_ref"])
+
             config_dict["dem_add_fmt_list"] = [section.get("DEM_ADDFMTLIST", "")]
             config_dict["mesh_fmt"] = section.get("MESH_FMT", "vtu")
 
@@ -311,8 +323,8 @@ class ConfigManager:
                     f"Missing required configuration fields for Switzerland mode: {', '.join(missing_fields)}"
                 )
         elif dem_mode == "user_provided":
-            # Other Locations mode: require user DEM, target EPSG, and POIs
-            required_fields = ["user_dem_path", "target_epsg", "pois"]
+            # Other Locations mode: require user DEM and target EPSG (POIs are optional)
+            required_fields = ["user_dem_path", "target_epsg"]
             missing_fields = [field for field in required_fields if field not in config_dict]
 
             if missing_fields:

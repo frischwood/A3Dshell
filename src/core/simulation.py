@@ -71,30 +71,13 @@ class SimulationOrchestrator:
             log_section(logger, "Phase 1: Setup", self.start_time)
             self._setup_directories()
 
-            # Phase 2: ROI & Data Download
-            log_section(logger, "Phase 2: ROI & Data", self.start_time)
-            roi = self._create_roi()
-            target_crs = self._get_target_crs()
-
-            # Phase 3: DEM Processing
-            log_section(logger, "Phase 3: DEM Processing", self.start_time)
-            dem_file = self._process_dem(roi, target_crs)
-
-            # Phase 4: LUS Processing
-            log_section(logger, "Phase 4: LUS Processing", self.start_time)
-            lus_file = self._process_lus(roi, dem_file, target_crs)
-
-            # Phase 5: IMIS Station Selection
-            log_section(logger, "Phase 5: IMIS Station Selection", self.start_time)
-            imis_stations = self._select_imis_stations(roi)
-
-            # Phase 6: Snowpack Preprocessing
-            log_section(logger, "Phase 6: Snowpack Preprocessing", self.start_time)
-            self._run_snowpack(imis_stations)
-
-            # Phase 7: A3D Configuration
-            log_section(logger, "Phase 7: A3D Configuration", self.start_time)
-            self._configure_a3d(imis_stations, lus_file)
+            # Different workflows for Switzerland vs Other Locations
+            if self.config.dem_mode == "swisstopo":
+                # Switzerland mode - full workflow
+                self._run_switzerland_mode()
+            elif self.config.dem_mode == "user_provided":
+                # Other Locations mode - simplified workflow
+                self._run_other_locations_mode()
 
             # Phase 8: Output Packaging
             log_section(logger, "Phase 8: Output Packaging", self.start_time)
@@ -120,6 +103,160 @@ class SimulationOrchestrator:
         self.paths.create_all_directories()
         self.packager.create_output_structure()
         logger.info(f"   ✓ Directories created: {self.paths.get_simulation_dir()}")
+
+    def _run_switzerland_mode(self) -> None:
+        """Run full workflow for Switzerland mode."""
+        # Phase 2: ROI & Data Download
+        log_section(logger, "Phase 2: ROI & Data", self.start_time)
+        roi = self._create_roi()
+        target_crs = self._get_target_crs()
+
+        # Phase 3: DEM Processing
+        log_section(logger, "Phase 3: DEM Processing", self.start_time)
+        dem_file = self._process_dem(roi, target_crs)
+
+        # Phase 4: LUS Processing
+        log_section(logger, "Phase 4: LUS Processing", self.start_time)
+        lus_file = self._process_lus(roi, dem_file, target_crs)
+
+        # Phase 5: IMIS Station Selection
+        log_section(logger, "Phase 5: IMIS Station Selection", self.start_time)
+        imis_stations = self._select_imis_stations(roi)
+
+        # Phase 6: Snowpack Preprocessing
+        log_section(logger, "Phase 6: Snowpack Preprocessing", self.start_time)
+        self._run_snowpack(imis_stations)
+
+        # Phase 7: A3D Configuration
+        log_section(logger, "Phase 7: A3D Configuration", self.start_time)
+        self._configure_a3d(imis_stations, lus_file)
+
+    def _run_other_locations_mode(self) -> None:
+        """Run simplified workflow for Other Locations mode."""
+        logger.info("Running Other Locations mode workflow")
+        logger.info("   User provides: DEM, meteorological data (SMET files)")
+        logger.info("   A3DShell generates: DEM conversion (TIF→ASC), LUS, POI files, setup folder")
+
+        # Phase 2: Convert user DEM from TIF to ASC
+        log_section(logger, "Phase 2: DEM Processing", self.start_time)
+        dem_file = self._convert_user_dem()
+
+        # Phase 3: Generate constant LUS
+        log_section(logger, "Phase 3: LUS Generation", self.start_time)
+        lus_file = self._generate_constant_lus(dem_file)
+
+        # Phase 4: Generate POI files
+        if self.config.pois:
+            log_section(logger, "Phase 4: POI File Generation", self.start_time)
+            self._generate_poi_smet()
+        else:
+            logger.info("Skipping POI generation (no POIs defined)")
+
+    def _convert_user_dem(self) -> Path:
+        """
+        Convert user-provided DEM from TIF to ASC format.
+
+        Returns:
+            Path to converted ASC file
+        """
+        import rasterio
+        from pathlib import Path
+
+        input_dem = Path(self.config.user_dem_path)
+        output_dem = self.paths.get_simu_grids_dir() / "dem.asc"
+
+        logger.info(f"Converting DEM: {input_dem.name}")
+        logger.info(f"   Input: {input_dem}")
+        logger.info(f"   Output: {output_dem}")
+
+        # Read TIF and write as ASC
+        with rasterio.open(input_dem) as src:
+            data = src.read(1)
+            meta = src.meta.copy()
+            meta.update({
+                'driver': 'AAIGrid',
+                'nodata': -9999
+            })
+
+            with rasterio.open(output_dem, 'w', **meta) as dst:
+                dst.write(data, 1)
+
+        logger.info(f"   ✓ DEM converted to ASC format")
+        logger.info(f"   Dimensions: {data.shape[1]} x {data.shape[0]} cells")
+
+        return output_dem
+
+    def _generate_constant_lus(self, dem_file: Path) -> Path:
+        """
+        Generate constant land use surface (LUS) grid.
+
+        Args:
+            dem_file: Path to DEM file (for getting dimensions)
+
+        Returns:
+            Path to generated LUS file
+        """
+        import rasterio
+        import numpy as np
+
+        lus_file = self.paths.get_simu_grids_dir() / "lus.asc"
+        lus_value = self.config.lus_prevah_cst
+
+        logger.info(f"Generating constant LUS with value: {lus_value}")
+
+        # Read DEM to get dimensions and georeferencing
+        with rasterio.open(dem_file) as dem:
+            # Create constant LUS array with same shape as DEM
+            lus_data = np.full(dem.shape, lus_value, dtype=np.int32)
+
+            # Copy metadata from DEM
+            meta = dem.meta.copy()
+            meta.update({
+                'dtype': 'int32',
+                'nodata': -9999
+            })
+
+            # Write LUS file
+            with rasterio.open(lus_file, 'w', **meta) as dst:
+                dst.write(lus_data, 1)
+
+        logger.info(f"   ✓ LUS file generated: {lus_file.name}")
+        logger.info(f"   All cells set to: {lus_value}")
+
+        return lus_file
+
+    def _generate_poi_smet(self) -> None:
+        """Generate POI SMET file from configuration."""
+        poi_file = self.paths.get_simu_input_dir() / "poi.smet"
+
+        logger.info(f"Generating POI SMET file: {poi_file.name}")
+        logger.info(f"   POIs: {len(self.config.pois)}")
+
+        # Read template
+        template_file = Path("input/templates/poi.smet")
+        with open(template_file, 'r') as f:
+            template_content = f.read()
+
+        # Generate POI data lines
+        poi_lines = []
+        for poi in self.config.pois:
+            # Format: easting northing altitude
+            poi_lines.append(f"{poi['x']:.2f} {poi['y']:.2f} {poi['z']:.2f}")
+
+        # Update template with EPSG and POI data
+        output_content = template_content.replace(
+            "epsg = 21781",
+            f"epsg = {self.config.target_epsg}"
+        )
+
+        # Add POI data after [DATA] section
+        output_content = output_content.rstrip() + "\n" + "\n".join(poi_lines) + "\n"
+
+        # Write output file
+        with open(poi_file, 'w') as f:
+            f.write(output_content)
+
+        logger.info(f"   ✓ POI file generated with {len(self.config.pois)} points")
 
     def _create_roi(self) -> ROI:
         """

@@ -1107,18 +1107,6 @@ with mode_tab_other:
             st.info("Place your GeoTIFF (.tif) DEM files in the `config/dem/` directory")
             st.session_state.config['user_dem_path'] = None
 
-        # Manual path input as fallback
-        with st.expander("Or enter DEM path manually"):
-            manual_dem_path = st.text_input(
-                "DEM file path:",
-                value=st.session_state.config.get('user_dem_path', ''),
-                help="Full path to DEM file (must be accessible from container)",
-                key="manual_dem_path_other"
-            )
-            if manual_dem_path and Path(manual_dem_path).exists():
-                st.session_state.config['user_dem_path'] = manual_dem_path
-                st.success(f"✅ Using manual path: {manual_dem_path}")
-
         st.divider()
         st.info("👉 Continue to the next tab: **3. POIs & Output**")
 

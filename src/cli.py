@@ -180,10 +180,23 @@ def main() -> int:
         config = config_manager.load_config()
 
         logger.info(f"Simulation: {config.simu_name}")
-        logger.info(f"Period: {config.start_date} to {config.end_date}")
-        logger.info(f"POI: {config.poi_x:.0f}E, {config.poi_y:.0f}N, {config.poi_z:.0f}m")
-        logger.info(f"ROI: {'Shapefile' if config.use_shp_roi else f'{config.roi_size}m bbox'}")
-        logger.info(f"GSD: {config.gsd}m (ref: {config.gsd_ref}m)")
+        logger.info(f"Mode: {config.dem_mode}")
+
+        # Switzerland mode specific info
+        if config.dem_mode == "swisstopo":
+            logger.info(f"Period: {config.start_date} to {config.end_date}")
+            logger.info(f"POI: {config.poi_x:.0f}E, {config.poi_y:.0f}N, {config.poi_z:.0f}m")
+            logger.info(f"ROI: {'Shapefile' if config.use_shp_roi else f'{config.roi_size}m bbox'}")
+            logger.info(f"GSD: {config.gsd}m (ref: {config.gsd_ref}m)")
+
+        # Other Locations mode specific info
+        elif config.dem_mode == "user_provided":
+            logger.info(f"DEM: {config.user_dem_path}")
+            logger.info(f"EPSG: {config.target_epsg}")
+            if config.pois:
+                logger.info(f"POIs: {len(config.pois)} defined")
+            else:
+                logger.info(f"POIs: None (optional)")
 
         # Run simulation orchestrator
         from .core.simulation import SimulationOrchestrator
