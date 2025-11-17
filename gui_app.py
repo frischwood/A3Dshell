@@ -1119,63 +1119,17 @@ with mode_tab_other:
                 st.session_state.config['user_dem_path'] = manual_dem_path
                 st.success(f"✅ Using manual path: {manual_dem_path}")
 
-        st.subheader("Region of Interest")
-        use_shapefile_other = st.checkbox(
-            "Use custom shapefile for ROI",
-            value=st.session_state.config.get('use_shapefile', False),
-            key="use_shapefile_other"
-        )
-
-        if use_shapefile_other:
-            shapefile_dir = Path("config/shapefiles")
-            available_shapefiles = find_shapefiles(shapefile_dir)
-
-            if available_shapefiles:
-                shapefile_options = [str(shp.relative_to(shapefile_dir.parent)) for shp in available_shapefiles]
-                roi_shapefile_other = st.selectbox(
-                    "Select Shapefile",
-                    options=shapefile_options,
-                    key="roi_shapefile_other"
-                )
-            else:
-                st.warning("⚠️ No shapefiles found in config/shapefiles/")
-                roi_shapefile_other = None
-        else:
-            roi_size_other = st.number_input(
-                "ROI Size (meters)",
-                value=int(st.session_state.config.get('roi_size', 1000)),
-                min_value=100,
-                max_value=50000,
-                step=100,
-                help="Square bounding box size around center point",
-                key="roi_size_other"
-            )
-
-            # Center point for ROI
-            col1, col2 = st.columns(2)
-            with col1:
-                roi_center_x = st.number_input(
-                    f"Center Easting (EPSG:{target_epsg})",
-                    value=float(st.session_state.config.get('poi_x', 500000)),
-                    key="roi_center_x_other"
-                )
-            with col2:
-                roi_center_y = st.number_input(
-                    f"Center Northing (EPSG:{target_epsg})",
-                    value=float(st.session_state.config.get('poi_y', 5000000)),
-                    key="roi_center_y_other"
-                )
-
         st.divider()
-        st.info("Continue to the next tab: **3. POIs & Output**")
+        st.info("👉 Continue to the next tab: **3. POIs & Output**")
 
     # ============================================================
     # Tab 3: POIs & Output (Other Locations)
     # ============================================================
     with tab3_other:
-        st.header("Points of Interest (POIs)")
+        st.header("Points of Interest (POIs) - Optional")
 
-        st.markdown("Define your Points of Interest for simulation. These will be written to the POI SMET file.")
+        st.markdown("**Optional**: Define your Points of Interest for simulation. These will be written to the POI SMET file.")
+        st.info("💡 You can skip adding POIs if you just want to generate the setup folder and DEM processing.")
 
         # Initialize POI list in session state
         if 'poi_list' not in st.session_state:
@@ -1218,25 +1172,9 @@ with mode_tab_other:
                         st.session_state.poi_list.pop(idx)
                         st.rerun()
         else:
-            st.info("ℹ️ No POIs added yet. Add at least one POI above.")
+            st.info("ℹ️ No POIs added yet. This is optional - you can proceed without POIs.")
 
         st.divider()
-
-        st.subheader("Output Settings")
-
-        col1, col2 = st.columns(2)
-        with col1:
-            gsd_other = st.number_input(
-                "Grid Spacing (GSD) in meters",
-                value=float(st.session_state.config.get('gsd', 10.0)),
-                min_value=0.5,
-                max_value=100.0,
-                step=0.5,
-                help="Resolution of output grids",
-                key="gsd_other"
-            )
-        with col2:
-            st.write("")  # Spacing
 
         st.subheader("Land Use")
         use_lus_tlm_other = st.checkbox(
@@ -1296,19 +1234,9 @@ SIMULATION_NAME = {simu_name_other}
 DEM_MODE = user_provided
 USER_DEM_PATH = {st.session_state.config.get('user_dem_path', '')}
 TARGET_EPSG = {target_epsg}
-USE_SHP_ROI = {'true' if use_shapefile_other else 'false'}
 """
-
-                if use_shapefile_other and 'roi_shapefile_other' in locals():
-                    config_content += f"ROI_SHAPEFILE = {roi_shapefile_other}\n"
-                else:
-                    config_content += f"ROI = {roi_size_other}\n"
-                    config_content += f"ROI_CENTER_X = {roi_center_x}\n"
-                    config_content += f"ROI_CENTER_Y = {roi_center_y}\n"
-
                 config_content += "\n[OUTPUT]\n"
                 config_content += f"OUT_COORDSYS = EPSG:{target_epsg}\n"
-                config_content += f"GSD = {gsd_other}\n"
                 config_content += "DEM_ADDFMTLIST =\n"
                 config_content += "MESH_FMT = vtu\n"
                 config_content += "\n[MAPS]\n"
@@ -1346,9 +1274,7 @@ USE_SHP_ROI = {'true' if use_shapefile_other else 'false'}
             if not simu_name_other:
                 st.error("Please provide a simulation name")
             elif not st.session_state.config.get('user_dem_path'):
-                st.error("Please upload a DEM file")
-            elif not st.session_state.poi_list:
-                st.error("Please add at least one POI")
+                st.error("Please select a DEM file")
             else:
                 # Create temporary config for this run
                 temp_config = Path("config") / f"_temp_{simu_name_other}.ini"
@@ -1361,19 +1287,10 @@ SIMULATION_NAME = {simu_name_other}
 DEM_MODE = user_provided
 USER_DEM_PATH = {st.session_state.config.get('user_dem_path', '')}
 TARGET_EPSG = {target_epsg}
-USE_SHP_ROI = {'true' if use_shapefile_other else 'false'}
 """
-
-                if use_shapefile_other and 'roi_shapefile_other' in locals():
-                    config_content += f"ROI_SHAPEFILE = {roi_shapefile_other}\n"
-                else:
-                    config_content += f"ROI = {roi_size_other}\n"
-                    config_content += f"ROI_CENTER_X = {roi_center_x}\n"
-                    config_content += f"ROI_CENTER_Y = {roi_center_y}\n"
 
                 config_content += "\n[OUTPUT]\n"
                 config_content += f"OUT_COORDSYS = EPSG:{target_epsg}\n"
-                config_content += f"GSD = {gsd_other}\n"
                 config_content += "DEM_ADDFMTLIST =\n"
                 config_content += "MESH_FMT = vtu\n"
                 config_content += "\n[MAPS]\n"

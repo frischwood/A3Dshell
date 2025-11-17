@@ -109,23 +109,18 @@ class SimulationConfig:
             if not self.target_epsg:
                 raise ValueError("TARGET_EPSG is required for Other Locations mode")
 
-            # Validate POIs list
-            if not self.pois or len(self.pois) == 0:
-                raise ValueError("At least one POI must be defined in [POIS] section for Other Locations mode")
+            # POIs are optional for Other Locations mode
+            # User may want to just generate setup without specific POIs
 
-            # Validate ROI center for bbox mode
-            if not self.use_shp_roi:
-                if self.roi_center_x is None or self.roi_center_y is None:
-                    raise ValueError("ROI_CENTER_X and ROI_CENTER_Y are required for bounding box mode in Other Locations")
+        # Check shapefile path if using shapefile ROI (only for Switzerland mode)
+        if self.dem_mode == "swisstopo":
+            if self.use_shp_roi and not self.roi_shapefile:
+                raise ValueError("ROI_SHAPEFILE must be specified when USE_SHP_ROI=true")
 
-        # Check shapefile path if using shapefile ROI
-        if self.use_shp_roi and not self.roi_shapefile:
-            raise ValueError("ROI_SHAPEFILE must be specified when USE_SHP_ROI=true")
-
-        if self.use_shp_roi and self.roi_shapefile:
-            shp_path = Path(self.roi_shapefile)
-            if not shp_path.exists():
-                raise FileNotFoundError(f"Shapefile not found: {self.roi_shapefile}")
+            if self.use_shp_roi and self.roi_shapefile:
+                shp_path = Path(self.roi_shapefile)
+                if not shp_path.exists():
+                    raise FileNotFoundError(f"Shapefile not found: {self.roi_shapefile}")
 
 
 class ConfigManager:
