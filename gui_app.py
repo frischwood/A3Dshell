@@ -410,448 +410,457 @@ if selected_config != "Create New":
         st.session_state.config['use_lus_tlm'] = parser.getboolean("A3D", "USE_LUS_TLM", fallback=False)
         st.session_state.config['lus_cst'] = parser.get("A3D", "LUS_PREVAH_CST", fallback="11500")
 
-# Tabs for configuration sections
-tab1, tab2, tab3, tab4 = st.tabs(["1.General", "2.Location & ROI", "3.Output", "4.Run ▶️"])
+# Parent tabs for Switzerland vs Other Locations
+mode_tab_switzerland, mode_tab_other = st.tabs(["Switzerland", "Other Locations"])
 
 # ============================================================
-# Tab 1: General Settings
+# SWITZERLAND MODE
 # ============================================================
-with tab1:
-    st.header("General Settings")
+with mode_tab_switzerland:
+    st.info("ℹ️ **Switzerland Mode**: Automatic DEM download from Swisstopo, IMIS station data via MeteoIO, and Snowpack preprocessing")
 
-    col1, col2 = st.columns(2)
+    # Tabs for configuration sections
+    tab1, tab2, tab3, tab4 = st.tabs(["1.General", "2.Location & ROI", "3.Output", "4.Run ▶️"])
 
-    with col1:
-        simu_name = st.text_input(
-            "Simulation Name",
-            value=st.session_state.config.get('simu_name', ''),
-            help="Unique name for this simulation (no spaces)"
+    # ============================================================
+    # Tab 1: General Settings
+    # ============================================================
+    with tab1:
+        st.header("General Settings")
+    
+        col1, col2 = st.columns(2)
+    
+        with col1:
+            simu_name = st.text_input(
+                "Simulation Name",
+                value=st.session_state.config.get('simu_name', ''),
+                help="Unique name for this simulation (no spaces)"
+            )
+    
+        with col2:
+            coord_sys = st.selectbox(
+                "Coordinate System",
+                ["CH1903+", "CH1903", "WGS84"],
+                index=["CH1903+", "CH1903", "WGS84"].index(st.session_state.config.get('coord_sys', 'CH1903+'))
+            )
+    
+        st.subheader("Simulation Period")
+        col1, col2 = st.columns(2)
+    
+        # Parse dates from config or use defaults
+        default_start = datetime(2023, 10, 1)
+        default_end = datetime(2023, 10, 31, 23, 59, 59)
+    
+        if st.session_state.config.get('start_date'):
+            try:
+                default_start = datetime.fromisoformat(st.session_state.config['start_date'].replace('T', ' '))
+            except:
+                pass
+    
+        if st.session_state.config.get('end_date'):
+            try:
+                default_end = datetime.fromisoformat(st.session_state.config['end_date'].replace('T', ' '))
+            except:
+                pass
+    
+        with col1:
+            start_date = st.date_input("Start Date", value=default_start)
+            start_time = st.time_input("Start Time", value=default_start.time())
+    
+        with col2:
+            end_date = st.date_input("End Date", value=default_end)
+            end_time = st.time_input("End Time", value=default_end.time())
+    
+        st.divider()
+        st.info("Continue to the next tab: **2. Location & ROI**")
+    
+    # ============================================================
+    # Tab 2: Location & ROI
+    # ============================================================
+    with tab2:
+        st.header("Region of Interest (ROI)")
+    
+        use_shapefile = st.checkbox(
+            "Use custom shapefile for ROI",
+            value=st.session_state.config.get('use_shp', True)
         )
-
-    with col2:
-        coord_sys = st.selectbox(
-            "Coordinate System",
-            ["CH1903+", "CH1903", "WGS84"],
-            index=["CH1903+", "CH1903", "WGS84"].index(st.session_state.config.get('coord_sys', 'CH1903+'))
-        )
-
-    st.subheader("Simulation Period")
-    col1, col2 = st.columns(2)
-
-    # Parse dates from config or use defaults
-    default_start = datetime(2023, 10, 1)
-    default_end = datetime(2023, 10, 31, 23, 59, 59)
-
-    if st.session_state.config.get('start_date'):
-        try:
-            default_start = datetime.fromisoformat(st.session_state.config['start_date'].replace('T', ' '))
-        except:
-            pass
-
-    if st.session_state.config.get('end_date'):
-        try:
-            default_end = datetime.fromisoformat(st.session_state.config['end_date'].replace('T', ' '))
-        except:
-            pass
-
-    with col1:
-        start_date = st.date_input("Start Date", value=default_start)
-        start_time = st.time_input("Start Time", value=default_start.time())
-
-    with col2:
-        end_date = st.date_input("End Date", value=default_end)
-        end_time = st.time_input("End Time", value=default_end.time())
-
-    st.divider()
-    st.info("👉 Continue to the next tab: **2. Location & ROI**")
-
-# ============================================================
-# Tab 2: Location & ROI
-# ============================================================
-with tab2:
-    st.header("Region of Interest (ROI)")
-
-    use_shapefile = st.checkbox(
-        "Use custom shapefile for ROI",
-        value=st.session_state.config.get('use_shp', True)
-    )
-
-    if use_shapefile:
-        # Option to provide existing shapefile or draw new one
-        shapefile_option = st.radio(
-            "How to define ROI:",
-            ["📁 Use existing shapefile", "🗺️ Draw on interactive map"],
-            horizontal=True
-        )
-
-        if shapefile_option == "📁 Use existing shapefile":
-            st.markdown("### 📁 Select Existing Shapefile")
-
-            # Shapefile browser
-            col1, col2 = st.columns([1, 2])
-
-            with col1:
-                search_dir = st.text_input(
-                    "Search directory:",
-                    value="config/",
-                    help="Directory to search for shapefiles (must be in a mounted volume)"
-                )
-
-            with col2:
-                # Find shapefiles in directory
-                found_shapefiles = find_shapefiles(search_dir)
-
-                if found_shapefiles:
-                    # Create dropdown options
-                    shapefile_options = ["[Type path manually]"] + [str(shp) for shp in found_shapefiles]
-
-                    selected_shapefile = st.selectbox(
-                        "Available shapefiles:",
-                        options=shapefile_options,
-                        help="Select from found shapefiles or choose to type manually"
+    
+        if use_shapefile:
+            # Option to provide existing shapefile or draw new one
+            shapefile_option = st.radio(
+                "How to define ROI:",
+                ["📁 Use existing shapefile", "🗺️ Draw on interactive map"],
+                horizontal=True
+            )
+    
+            if shapefile_option == "📁 Use existing shapefile":
+                st.markdown("### 📁 Select Existing Shapefile")
+    
+                # Shapefile browser
+                col1, col2 = st.columns([1, 2])
+    
+                with col1:
+                    search_dir = st.text_input(
+                        "Search directory:",
+                        value="config/",
+                        help="Directory to search for shapefiles (must be in a mounted volume)"
                     )
-
-                    # Auto-populate if user selected a file
-                    if selected_shapefile != "[Type path manually]":
-                        default_path = selected_shapefile
-                    else:
-                        default_path = st.session_state.config.get('roi_shapefile', '')
-                else:
-                    st.info(f"ℹ️ No shapefiles found in `{search_dir}`. Enter path manually below.")
-                    default_path = st.session_state.config.get('roi_shapefile', '')
-
-            # Manual path input (always available as fallback)
-            roi_shapefile = st.text_input(
-                "Shapefile path:",
-                value=default_path,
-                help="Path to .shp file (must be in a mounted volume: config/, shapefiles/, etc.)"
-            )
-
-            # Mark as validated if user provided a shapefile path (we trust existing shapefiles)
-            if roi_shapefile:
-                st.session_state['roi_validated'] = True
-                st.info(f"📍 Using shapefile: `{roi_shapefile}`")
-            else:
-                st.session_state['roi_validated'] = False
-
-            # Info message about Docker volumes
-            st.caption("💡 **Docker users**: Shapefiles must be in mounted volumes (e.g., `config/`, `shapefiles/`). See README for details.")
-        else:
-            # Interactive map for drawing ROI
-            st.markdown("### 🗺️ Draw ROI on Swiss Map")
-            st.info("**Instructions**: Use the rectangle tool (□) on the left side of the map to draw your ROI. Click the save button when done.")
-
-            # Initialize roi_shapefile from session state
-            roi_shapefile = st.session_state.config.get('roi_shapefile', '')
-
-            # Show map
-            roi_map = create_roi_map()
-            map_output = st_folium(roi_map, width=800, height=600, key="roi_map")
-
-            # Handle drawn polygon
-            if map_output and map_output.get('last_active_drawing'):
-                drawn_geom = map_output['last_active_drawing']
-
-                # Debug: Show what was captured
-                with st.expander("🔍 Debug: View captured geometry", expanded=False):
-                    st.json(drawn_geom)
-
-                # Validate polygon is within Swiss boundaries
-                is_valid, boundary_msg = check_polygon_in_swiss_boundaries(drawn_geom['geometry'])
-
-                if is_valid:
-                    st.success("✅ Polygon drawn! Click button below to save as shapefile.")
-                    st.info(boundary_msg)
-
-                    # Input for shapefile name
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        shapefile_name = st.text_input(
-                            "Shapefile name",
-                            value="roi_drawn",
-                            help="Name for the shapefile (without .shp extension)"
+    
+                with col2:
+                    # Find shapefiles in directory
+                    found_shapefiles = find_shapefiles(search_dir)
+    
+                    if found_shapefiles:
+                        # Create dropdown options
+                        shapefile_options = ["[Type path manually]"] + [str(shp) for shp in found_shapefiles]
+    
+                        selected_shapefile = st.selectbox(
+                            "Available shapefiles:",
+                            options=shapefile_options,
+                            help="Select from found shapefiles or choose to type manually"
                         )
-                    with col2:
-                        st.markdown("<br>", unsafe_allow_html=True)
-                        save_button = st.button("💾 Save ROI", type="primary")
-
-                    if save_button and shapefile_name:
-                        # Save shapefile
-                        shapefile_dir = Path("config/shapefiles")
-                        shapefile_path = shapefile_dir / f"{shapefile_name}.shp"
-
-                        success, message = save_drawn_roi(drawn_geom, str(shapefile_path))
-                        if success:
-                            st.success(message)
-                            roi_shapefile = str(shapefile_path)
-                            st.session_state.config['roi_shapefile'] = str(shapefile_path)
-                            st.info(f"📍 Shapefile path set to: `{roi_shapefile}`")
-                            # Mark ROI as validated (polygon was already validated above)
-                            st.session_state['roi_validated'] = True
+    
+                        # Auto-populate if user selected a file
+                        if selected_shapefile != "[Type path manually]":
+                            default_path = selected_shapefile
                         else:
-                            st.error(message)
-                            st.session_state['roi_validated'] = False
-                else:
-                    # Polygon outside boundaries - show error and prevent saving
-                    st.error(boundary_msg)
-                    st.warning("🚫 Cannot save ROI outside Swiss boundaries. Please redraw within Switzerland.")
-                    st.session_state['roi_validated'] = False
-            else:
-                # Show warning if no polygon drawn yet
-                if not roi_shapefile:
-                    st.warning("⚠️ No polygon drawn yet. Use the drawing tools on the map.")
-    else:
-        # Bounding box mode - need center point coordinates
-        st.markdown("### 📍 ROI Center Point")
-
-        # Option to pick point on map or enter manually
-        center_point_option = st.radio(
-            "How to define center point:",
-            ["⌨️ Enter coordinates manually", "🗺️ Pick on map"],
-            horizontal=True
-        )
-
-        if center_point_option == "🗺️ Pick on map":
-            st.info("**Instructions**: Click anywhere on the map to select the ROI center point.")
-
-            # Create map for point selection
-            center_map = folium.Map(
-                location=[46.8, 8.2],
-                zoom_start=8,
-                tiles=None
-            )
-
-            # Add Swisstopo base layer
-            folium.raster_layers.WmsTileLayer(
-                url='https://wms.geo.admin.ch/',
-                layers='ch.swisstopo.pixelkarte-farbe',
-                fmt='image/png',
-                transparent=False,
-                name='Swisstopo Map',
-                overlay=False,
-                control=True,
-                attr='© swisstopo'
-            ).add_to(center_map)
-
-            # Add click listener for coordinates
-            center_map.add_child(folium.LatLngPopup())
-
-            # Display map and capture clicks
-            center_map_output = st_folium(center_map, width=800, height=400, key="center_point_map")
-
-            # Extract coordinates from map click
-            if center_map_output and center_map_output.get('last_clicked'):
-                lat = center_map_output['last_clicked']['lat']
-                lon = center_map_output['last_clicked']['lng']
-
-                # Transform WGS84 to Swiss LV95
-                transformer = Transformer.from_crs("EPSG:4326", "EPSG:2056", always_xy=True)
-                poi_x, poi_y = transformer.transform(lon, lat)
-
-                # Fetch elevation from Swisstopo Height API
-                try:
-                    import requests
-                    height_url = f"https://api3.geo.admin.ch/rest/services/height?easting={poi_x:.1f}&northing={poi_y:.1f}&sr=2056"
-                    response = requests.get(height_url, timeout=5)
-
-                    if response.status_code == 200:
-                        height_data = response.json()
-                        poi_z = float(height_data.get('height', 1500))
-                        st.success(f"✅ Point selected: {poi_x:.1f}, {poi_y:.1f} | Elevation: {poi_z:.1f}m")
+                            default_path = st.session_state.config.get('roi_shapefile', '')
                     else:
-                        # Fallback if API fails
-                        poi_z = float(st.session_state.config.get('poi_z', 1500))
-                        st.warning(f"⚠️ Point selected: {poi_x:.1f}, {poi_y:.1f} | Using default elevation (API unavailable)")
-                except Exception:
-                    # Fallback if request fails
-                    poi_z = float(st.session_state.config.get('poi_z', 1500))
-                    st.success(f"✅ Point selected: {poi_x:.1f}, {poi_y:.1f} | Using default elevation")
+                        st.info(f"ℹ️ No shapefiles found in `{search_dir}`. Enter path manually below.")
+                        default_path = st.session_state.config.get('roi_shapefile', '')
+    
+                # Manual path input (always available as fallback)
+                roi_shapefile = st.text_input(
+                    "Shapefile path:",
+                    value=default_path,
+                    help="Path to .shp file (must be in a mounted volume: config/, shapefiles/, etc.)"
+                )
+    
+                # Mark as validated if user provided a shapefile path (we trust existing shapefiles)
+                if roi_shapefile:
+                    st.session_state['roi_validated'] = True
+                    st.info(f"📍 Using shapefile: `{roi_shapefile}`")
+                else:
+                    st.session_state['roi_validated'] = False
+    
+                # Info message about Docker volumes
+                st.caption("💡 **Docker users**: Shapefiles must be in mounted volumes (e.g., `config/`, `shapefiles/`). See README for details.")
             else:
-                # Use defaults
-                poi_x = float(st.session_state.config.get('poi_x', 645000))
-                poi_y = float(st.session_state.config.get('poi_y', 115000))
-                poi_z = float(st.session_state.config.get('poi_z', 1500))
-
-            # Show coordinates (read-only display)
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Easting (EPSG:2056)", f"{poi_x:.1f}")
-            with col2:
-                st.metric("Northing (EPSG:2056)", f"{poi_y:.1f}")
-
-            # Allow altitude adjustment
-            poi_z = st.number_input(
-                "Altitude (m)",
-                value=float(poi_z),
-                format="%.1f",
-                help="Adjust altitude of center point if needed"
-            )
-
+                # Interactive map for drawing ROI
+                st.markdown("### 🗺️ Draw ROI on Swiss Map")
+                st.info("**Instructions**: Use the rectangle tool (□) on the left side of the map to draw your ROI. Click the save button when done.")
+    
+                # Initialize roi_shapefile from session state
+                roi_shapefile = st.session_state.config.get('roi_shapefile', '')
+    
+                # Show map
+                roi_map = create_roi_map()
+                map_output = st_folium(roi_map, width=800, height=600, key="roi_map")
+    
+                # Handle drawn polygon
+                if map_output and map_output.get('last_active_drawing'):
+                    drawn_geom = map_output['last_active_drawing']
+    
+                    # Debug: Show what was captured
+                    with st.expander("🔍 Debug: View captured geometry", expanded=False):
+                        st.json(drawn_geom)
+    
+                    # Validate polygon is within Swiss boundaries
+                    is_valid, boundary_msg = check_polygon_in_swiss_boundaries(drawn_geom['geometry'])
+    
+                    if is_valid:
+                        st.success("✅ Polygon drawn! Click button below to save as shapefile.")
+                        st.info(boundary_msg)
+    
+                        # Input for shapefile name
+                        col1, col2 = st.columns([3, 1])
+                        with col1:
+                            shapefile_name = st.text_input(
+                                "Shapefile name",
+                                value="roi_drawn",
+                                help="Name for the shapefile (without .shp extension)"
+                            )
+                        with col2:
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            save_button = st.button("💾 Save ROI", type="primary")
+    
+                        if save_button and shapefile_name:
+                            # Save shapefile
+                            shapefile_dir = Path("config/shapefiles")
+                            shapefile_path = shapefile_dir / f"{shapefile_name}.shp"
+    
+                            success, message = save_drawn_roi(drawn_geom, str(shapefile_path))
+                            if success:
+                                st.success(message)
+                                roi_shapefile = str(shapefile_path)
+                                st.session_state.config['roi_shapefile'] = str(shapefile_path)
+                                st.info(f"📍 Shapefile path set to: `{roi_shapefile}`")
+                                # Mark ROI as validated (polygon was already validated above)
+                                st.session_state['roi_validated'] = True
+                            else:
+                                st.error(message)
+                                st.session_state['roi_validated'] = False
+                    else:
+                        # Polygon outside boundaries - show error and prevent saving
+                        st.error(boundary_msg)
+                        st.warning("🚫 Cannot save ROI outside Swiss boundaries. Please redraw within Switzerland.")
+                        st.session_state['roi_validated'] = False
+                else:
+                    # Show warning if no polygon drawn yet
+                    if not roi_shapefile:
+                        st.warning("⚠️ No polygon drawn yet. Use the drawing tools on the map.")
         else:
-            # Manual coordinate entry
-            col1, col2, col3 = st.columns(3)
-
-            with col1:
-                poi_x = st.number_input(
-                    "Easting (EPSG:2056 or CH1903)",
-                    value=float(st.session_state.config.get('poi_x', 645000)),
-                    format="%.1f",
-                    help="X coordinate of ROI center (auto-converts CH1903 to EPSG:2056)"
+            # Bounding box mode - need center point coordinates
+            st.markdown("### 📍 ROI Center Point")
+    
+            # Option to pick point on map or enter manually
+            center_point_option = st.radio(
+                "How to define center point:",
+                ["⌨️ Enter coordinates manually", "🗺️ Pick on map"],
+                horizontal=True
+            )
+    
+            if center_point_option == "🗺️ Pick on map":
+                st.info("**Instructions**: Click anywhere on the map to select the ROI center point.")
+    
+                # Create map for point selection
+                center_map = folium.Map(
+                    location=[46.8, 8.2],
+                    zoom_start=8,
+                    tiles=None
                 )
-
-            with col2:
-                poi_y = st.number_input(
-                    "Northing (EPSG:2056 or CH1903)",
-                    value=float(st.session_state.config.get('poi_y', 115000)),
-                    format="%.1f",
-                    help="Y coordinate of ROI center (auto-converts CH1903 to EPSG:2056)"
-                )
-
-            with col3:
+    
+                # Add Swisstopo base layer
+                folium.raster_layers.WmsTileLayer(
+                    url='https://wms.geo.admin.ch/',
+                    layers='ch.swisstopo.pixelkarte-farbe',
+                    fmt='image/png',
+                    transparent=False,
+                    name='Swisstopo Map',
+                    overlay=False,
+                    control=True,
+                    attr='© swisstopo'
+                ).add_to(center_map)
+    
+                # Add click listener for coordinates
+                center_map.add_child(folium.LatLngPopup())
+    
+                # Display map and capture clicks
+                center_map_output = st_folium(center_map, width=800, height=400, key="center_point_map")
+    
+                # Extract coordinates from map click
+                if center_map_output and center_map_output.get('last_clicked'):
+                    lat = center_map_output['last_clicked']['lat']
+                    lon = center_map_output['last_clicked']['lng']
+    
+                    # Transform WGS84 to Swiss LV95
+                    transformer = Transformer.from_crs("EPSG:4326", "EPSG:2056", always_xy=True)
+                    poi_x, poi_y = transformer.transform(lon, lat)
+    
+                    # Fetch elevation from Swisstopo Height API
+                    try:
+                        import requests
+                        height_url = f"https://api3.geo.admin.ch/rest/services/height?easting={poi_x:.1f}&northing={poi_y:.1f}&sr=2056"
+                        response = requests.get(height_url, timeout=5)
+    
+                        if response.status_code == 200:
+                            height_data = response.json()
+                            poi_z = float(height_data.get('height', 1500))
+                            st.success(f"✅ Point selected: {poi_x:.1f}, {poi_y:.1f} | Elevation: {poi_z:.1f}m")
+                        else:
+                            # Fallback if API fails
+                            poi_z = float(st.session_state.config.get('poi_z', 1500))
+                            st.warning(f"⚠️ Point selected: {poi_x:.1f}, {poi_y:.1f} | Using default elevation (API unavailable)")
+                    except Exception:
+                        # Fallback if request fails
+                        poi_z = float(st.session_state.config.get('poi_z', 1500))
+                        st.success(f"✅ Point selected: {poi_x:.1f}, {poi_y:.1f} | Using default elevation")
+                else:
+                    # Use defaults
+                    poi_x = float(st.session_state.config.get('poi_x', 645000))
+                    poi_y = float(st.session_state.config.get('poi_y', 115000))
+                    poi_z = float(st.session_state.config.get('poi_z', 1500))
+    
+                # Show coordinates (read-only display)
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Easting (EPSG:2056)", f"{poi_x:.1f}")
+                with col2:
+                    st.metric("Northing (EPSG:2056)", f"{poi_y:.1f}")
+    
+                # Allow altitude adjustment
                 poi_z = st.number_input(
                     "Altitude (m)",
-                    value=float(st.session_state.config.get('poi_z', 1500)),
+                    value=float(poi_z),
                     format="%.1f",
-                    help="Altitude of ROI center point"
+                    help="Adjust altitude of center point if needed"
                 )
-
-        # ROI size (applies to both map and manual entry)
-        roi_size = st.number_input(
-            "ROI Size (meters)",
-            value=int(st.session_state.config.get('roi_size', 1000)),
-            min_value=100,
-            max_value=50000,
-            step=100,
-            help="Size of bounding box around center point"
+    
+            else:
+                # Manual coordinate entry
+                col1, col2, col3 = st.columns(3)
+    
+                with col1:
+                    poi_x = st.number_input(
+                        "Easting (EPSG:2056 or CH1903)",
+                        value=float(st.session_state.config.get('poi_x', 645000)),
+                        format="%.1f",
+                        help="X coordinate of ROI center (auto-converts CH1903 to EPSG:2056)"
+                    )
+    
+                with col2:
+                    poi_y = st.number_input(
+                        "Northing (EPSG:2056 or CH1903)",
+                        value=float(st.session_state.config.get('poi_y', 115000)),
+                        format="%.1f",
+                        help="Y coordinate of ROI center (auto-converts CH1903 to EPSG:2056)"
+                    )
+    
+                with col3:
+                    poi_z = st.number_input(
+                        "Altitude (m)",
+                        value=float(st.session_state.config.get('poi_z', 1500)),
+                        format="%.1f",
+                        help="Altitude of ROI center point"
+                    )
+    
+            # ROI size (applies to both map and manual entry)
+            roi_size = st.number_input(
+                "ROI Size (meters)",
+                value=int(st.session_state.config.get('roi_size', 1000)),
+                min_value=100,
+                max_value=50000,
+                step=100,
+                help="Size of bounding box around center point"
+            )
+    
+            # Validate ROI is within Swiss boundaries
+            is_valid, boundary_msg = check_swiss_boundaries(poi_x, poi_y, roi_size)
+    
+            if is_valid:
+                st.success(boundary_msg)
+                st.session_state['roi_validated'] = True
+            else:
+                st.error(boundary_msg)
+                st.warning("⚠️ Please adjust the center point or reduce the ROI size to fit within Switzerland.")
+                st.session_state['roi_validated'] = False
+    
+        # Buffer size applies to both shapefile and bounding box modes
+        buffer_size = st.number_input(
+            "Buffer Size for IMIS Stations (meters)",
+            value=int(st.session_state.config.get('buffer_size', 10000)),
+            min_value=1000,
+            max_value=200000,
+            step=1000,
+            help="Distance to search for meteorological stations"
         )
-
-        # Validate ROI is within Swiss boundaries
-        is_valid, boundary_msg = check_swiss_boundaries(poi_x, poi_y, roi_size)
-
-        if is_valid:
-            st.success(boundary_msg)
-            st.session_state['roi_validated'] = True
-        else:
-            st.error(boundary_msg)
-            st.warning("⚠️ Please adjust the center point or reduce the ROI size to fit within Switzerland.")
-            st.session_state['roi_validated'] = False
-
-    # Buffer size applies to both shapefile and bounding box modes
-    buffer_size = st.number_input(
-        "Buffer Size for IMIS Stations (meters)",
-        value=int(st.session_state.config.get('buffer_size', 10000)),
-        min_value=1000,
-        max_value=200000,
-        step=1000,
-        help="Distance to search for meteorological stations"
-    )
-
-    # When using shapefile, POI is derived from ROI center (no manual input needed)
-    if use_shapefile:
-        # Set default POI values (will be overridden by backend from shapefile)
-        poi_x = float(st.session_state.config.get('poi_x', 645000))
-        poi_y = float(st.session_state.config.get('poi_y', 115000))
-        poi_z = float(st.session_state.config.get('poi_z', 1500))
-
-    st.divider()
-    st.info("👉 Continue to the next tab: **3. Output**")
-
-# ============================================================
-# Tab 3: Output Settings
-# ============================================================
-with tab3:
-    st.header("Output Settings")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        gsd = st.number_input(
-            "Grid Spacing (GSD) - meters",
-            value=float(st.session_state.config.get('gsd', 10.0)),
-            min_value=1.0,
-            max_value=100.0,
-            step=1.0,
-            help="Output resolution (smaller = higher resolution, longer processing)"
-        )
-
-    with col2:
-        gsd_ref = st.selectbox(
-            "Reference DEM Resolution",
-            [0.5, 2.0],
-            index=[0.5, 2.0].index(float(st.session_state.config.get('gsd_ref', 2.0))),
-            help="Source DEM resolution from Swisstopo"
-        )
-
-    st.divider()
-    st.header("Land Use")
-
-    st.info("ℹ️ SwissTLMRegio integration is a future feature. Currently, only constant land use values are supported.")
-
-    use_lus_tlm = st.checkbox(
-        "Use SwissTLMRegio for land use (Coming Soon)",
-        value=False,
-        disabled=True,
-        help="Automatic download of Swiss topographic land use data - not yet implemented"
-    )
-
-    lus_constant = st.number_input(
-        "Constant Land Use Value",
-        value=int(st.session_state.config.get('lus_cst', 11500)),
-        help="Single PREVAH land use code (format: 1LLCD where LL is PREVAH code)"
-    )
-
-    st.divider()
-    st.info("👉 Continue to the next tab: **4. Run ▶️**")
-
-# ============================================================
-# Tab 4: Run tool
-# ============================================================
-with tab4:
-    st.header("Configuration Summary")
-
-    # Build start/end datetime strings
-    start_dt = datetime.combine(start_date, start_time)
-    end_dt = datetime.combine(end_date, end_time)
-
-    # Summary display
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.metric("Simulation Name", simu_name)
-        st.metric("Period", f"{(end_dt - start_dt).days} days")
-        st.metric("POI", f"{poi_x:.0f}E, {poi_y:.0f}N, {poi_z:.0f}m")
-
-    with col2:
-        st.metric("Coordinate System", coord_sys)
-        st.metric("Grid Spacing", f"{gsd}m")
+    
+        # When using shapefile, POI is derived from ROI center (no manual input needed)
         if use_shapefile:
-            st.metric("ROI", "Custom Shapefile")
-        else:
-            st.metric("ROI", f"{roi_size}m bbox")
-
-    st.divider()
-
-    # Save config section
-    col1, col2 = st.columns([3, 1])
-
-    with col1:
-        save_config_name = st.text_input(
-            "Config filename (without .ini)",
-            value=simu_name if simu_name else "my_simulation",
-            help="Name for saving this configuration"
+            # Set default POI values (will be overridden by backend from shapefile)
+            poi_x = float(st.session_state.config.get('poi_x', 645000))
+            poi_y = float(st.session_state.config.get('poi_y', 115000))
+            poi_z = float(st.session_state.config.get('poi_z', 1500))
+    
+        st.divider()
+        st.info("Continue to the next tab: **3. Output**")
+    
+    # ============================================================
+    # Tab 3: Output Settings
+    # ============================================================
+    with tab3:
+        st.header("Output Settings")
+    
+        col1, col2 = st.columns(2)
+    
+        with col1:
+            gsd = st.number_input(
+                "Grid Spacing (GSD) - meters",
+                value=float(st.session_state.config.get('gsd', 10.0)),
+                min_value=1.0,
+                max_value=100.0,
+                step=1.0,
+                help="Output resolution (smaller = higher resolution, longer processing)"
+            )
+    
+        with col2:
+            gsd_ref = st.selectbox(
+                "Reference DEM Resolution",
+                [0.5, 2.0],
+                index=[0.5, 2.0].index(float(st.session_state.config.get('gsd_ref', 2.0))),
+                help="Source DEM resolution from Swisstopo"
+            )
+    
+        st.divider()
+        st.header("Land Use")
+    
+        st.info("ℹ️ SwissTLMRegio integration is a future feature. Currently, only constant land use values are supported.")
+    
+        use_lus_tlm = st.checkbox(
+            "Use SwissTLMRegio for land use (Coming Soon)",
+            value=False,
+            disabled=True,
+            help="Automatic download of Swiss topographic land use data - not yet implemented"
         )
-
-    with col2:
-        st.write("")  # Spacing
-        st.write("")  # Spacing
-        save_button = st.button("💾 Save Config", use_container_width=True)
-
-    if save_button:
-        if not save_config_name:
-            st.error("Please provide a config filename")
-        else:
-            # Create config file
-            config_content = f"""# A3Dshell Configuration
+    
+        lus_constant = st.number_input(
+            "Constant Land Use Value",
+            value=int(st.session_state.config.get('lus_cst', 11500)),
+            help="Single PREVAH land use code (format: 1LLCD where LL is PREVAH code)"
+        )
+    
+        st.divider()
+        st.info("Continue to the next tab: **4. Run ▶️**")
+    
+    # ============================================================
+    # Tab 4: Run tool
+    # ============================================================
+    with tab4:
+        st.header("Configuration Summary")
+    
+        # Build start/end datetime strings
+        start_dt = datetime.combine(start_date, start_time)
+        end_dt = datetime.combine(end_date, end_time)
+    
+        # Summary display
+        col1, col2 = st.columns(2)
+    
+        with col1:
+            st.metric("Simulation Name", simu_name)
+            st.metric("Period", f"{(end_dt - start_dt).days} days")
+            st.metric("POI", f"{poi_x:.0f}E, {poi_y:.0f}N, {poi_z:.0f}m")
+    
+        with col2:
+            st.metric("Coordinate System", coord_sys)
+            st.metric("Grid Spacing", f"{gsd}m")
+            if use_shapefile:
+                st.metric("ROI", "Custom Shapefile")
+            else:
+                st.metric("ROI", f"{roi_size}m bbox")
+    
+        st.divider()
+    
+        # Save config section
+        col1, col2 = st.columns([3, 1])
+    
+        with col1:
+            save_config_name = st.text_input(
+                "Config filename (without .ini)",
+                value=simu_name if simu_name else "my_simulation",
+                help="Name for saving this configuration"
+            )
+    
+        with col2:
+            st.write("")  # Spacing
+            st.write("")  # Spacing
+            save_button = st.button("💾 Save Config", use_container_width=True)
+    
+        if save_button:
+            if not save_config_name:
+                st.error("Please provide a config filename")
+            else:
+                # Create config file
+                config_content = f"""# A3Dshell Configuration
 # Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
 [GENERAL]
@@ -865,177 +874,567 @@ NORTH_epsg2056 = {poi_y}
 altLV95 = {poi_z}
 USE_SHP_ROI = {'true' if use_shapefile else 'false'}
 """
+    
+                if use_shapefile:
+                    config_content += f"ROI_SHAPEFILE = {roi_shapefile}\n"
+                else:
+                    config_content += f"ROI = {roi_size}\n"
 
-            if use_shapefile:
-                config_content += f"ROI_SHAPEFILE = {roi_shapefile}\n"
+                config_content += f"BUFFERSIZE = {buffer_size}\n"
+                config_content += f"\n[OUTPUT]\n"
+                config_content += f"OUT_COORDSYS = {coord_sys}\n"
+                config_content += f"GSD = {gsd}\n"
+                config_content += f"GSD_ref = {gsd_ref}\n"
+                config_content += f"DEM_ADDFMTLIST =\n"
+                config_content += f"MESH_FMT = vtu\n"
+                config_content += f"\n[MAPS]\n"
+                config_content += f"PLOT_HORIZON = false\n"
+                config_content += f"\n[A3D]\n"
+                config_content += f"USE_GROUNDEYE = false\n"
+                config_content += f"USE_LUS_TLM = {'true' if use_lus_tlm else 'false'}\n"
+    
+                if not use_lus_tlm:
+                    config_content += f"LUS_PREVAH_CST = {lus_constant}\n"
+
+                config_content += "DO_PVP_3D = false\n"
+                config_content += "PVP_3D_FMT = vtu\n"
+                config_content += "SP_BIN_PATH = snowpack\n"
+    
+                # Save file
+                config_path = config_dir / f"{save_config_name}.ini"
+                with open(config_path, 'w') as f:
+                    f.write(config_content)
+    
+                st.success(f"✅ Configuration saved to: {config_path}")
+    
+        st.divider()
+    
+        # Run simulation section
+        st.header("Run Setup")
+    
+        col1, col2 = st.columns([2, 1])
+    
+        with col1:
+            skip_snowpack = st.checkbox("Skip Snowpack preprocessing", value=False)
+    
+            # VPN warning if Snowpack preprocessing is enabled
+            if not skip_snowpack:
+                st.warning("⚠️ **SLF/WSL VPN Required**: Snowpack preprocessing requires VPN access to the IMIS database via MeteoIO.")
+    
+            log_level = st.selectbox("Log Level", ["INFO", "DEBUG", "WARNING", "ERROR"])
+    
+        with col2:
+            st.write("")  # Spacing
+            st.write("")  # Spacing
+    
+        # Check if ROI is validated
+        roi_validated = st.session_state.get('roi_validated', False)
+    
+        # Show validation status
+        if not roi_validated:
+            st.error("🚫 Cannot run simulation: ROI/POI must be confirmed within Swiss boundaries")
+            st.info("💡 Go to the **Location & ROI** tab to configure and validate your region of interest.")
+    
+        # Disable button if validation failed
+        if st.button("▶️ Start Run", type="primary", use_container_width=True, disabled=not roi_validated):
+            if not simu_name:
+                st.error("Please provide a simulation name")
             else:
-                config_content += f"ROI = {roi_size}\n"
+                # Create a temporary config for this run
+                temp_config = config_dir / f"_temp_{simu_name}.ini"
+    
+                config_content = f"""# Temporary A3Dshell Configuration
+    [GENERAL]
+    SIMULATION_NAME = {simu_name}
+    START_DATE = {start_dt.strftime('%Y-%m-%dT%H:%M:%S')}
+    END_DATE = {end_dt.strftime('%Y-%m-%dT%H:%M:%S')}
+    
+    [INPUT]
+    EAST_epsg2056 = {poi_x}
+    NORTH_epsg2056 = {poi_y}
+    altLV95 = {poi_z}
+    USE_SHP_ROI = {'true' if use_shapefile else 'false'}
+    """
+    
+                if use_shapefile:
+                    config_content += f"ROI_SHAPEFILE = {roi_shapefile}\n"
+                else:
+                    config_content += f"ROI = {roi_size}\n"
 
-            config_content += f"""BUFFERSIZE = {buffer_size}
+                config_content += f"BUFFERSIZE = {buffer_size}\n"
+                config_content += f"\n[OUTPUT]\n"
+                config_content += f"OUT_COORDSYS = {coord_sys}\n"
+                config_content += f"GSD = {gsd}\n"
+                config_content += f"GSD_ref = {gsd_ref}\n"
+                config_content += f"DEM_ADDFMTLIST =\n"
+                config_content += f"MESH_FMT = vtu\n"
+                config_content += f"\n[MAPS]\n"
+                config_content += f"PLOT_HORIZON = false\n"
+                config_content += f"\n[A3D]\n"
+                config_content += f"USE_GROUNDEYE = false\n"
+                config_content += f"USE_LUS_TLM = {'true' if use_lus_tlm else 'false'}\n"
+    
+                if not use_lus_tlm:
+                    config_content += f"LUS_PREVAH_CST = {lus_constant}\n"
 
-[OUTPUT]
-OUT_COORDSYS = {coord_sys}
-GSD = {gsd}
-GSD_ref = {gsd_ref}
-DEM_ADDFMTLIST =
-MESH_FMT = vtu
+                config_content += "DO_PVP_3D = false\n"
+                config_content += "PVP_3D_FMT = vtu\n"
+                config_content += "SP_BIN_PATH = snowpack\n"
+    
+                # Save temp config
+                with open(temp_config, 'w') as f:
+                    f.write(config_content)
+    
+                # Build command
+                cmd = [
+                    "python", "-m", "src.cli",
+                    "--config", str(temp_config),
+                    "--log-level", log_level
+                ]
+    
+                if skip_snowpack:
+                    cmd.append("--skip-snowpack")
+    
+                st.info(f"🚀 Starting simulation: {simu_name}")
+                st.code(" ".join(cmd), language="bash")
+    
+                # Run simulation
+                with st.spinner("Running simulation... (this may take several minutes)"):
+                    try:
+                        result = subprocess.run(
+                            cmd,
+                            capture_output=True,
+                            text=True,
+                            timeout=3600  # 1 hour timeout
+                        )
+    
+                        # Display output
+                        st.subheader("Output")
+                        st.text_area("Run Log", value=result.stdout, height=400)
+    
+                        if result.returncode == 0:
+                            st.success("✅ Run completed successfully!")
+                            st.snow()
+    
+                            # Show output location
+                            output_dir = Path("output") / simu_name
+                            if output_dir.exists():
+                                st.info(f"📁 Output location: {output_dir}")
+                        else:
+                            st.error(f"❌ Run failed with exit code {result.returncode}")
+                            if result.stderr:
+                                st.error("Error output:")
+                                st.code(result.stderr)
+    
+                    except subprocess.TimeoutExpired:
+                        st.error("⏱️ Run timed out (> 1 hour)")
+                    except Exception as e:
+                        st.error(f"❌ Error running simulation: {str(e)}")
+    
+                    finally:
+                        # Clean up temp config
+                        if temp_config.exists():
+                            temp_config.unlink()
 
-[MAPS]
-PLOT_HORIZON = false
+# ============================================================
+# OTHER LOCATIONS MODE
+# ============================================================
+with mode_tab_other:
+    st.info("ℹ️ **Other Locations Mode**: Provide your own DEM (GeoTIFF), define POIs, and manage land use. Meteorological data must be provided manually.")
 
-[A3D]
-USE_GROUNDEYE = false
-USE_LUS_TLM = {'true' if use_lus_tlm else 'false'}
-"""
+    # Tabs for Other Locations mode
+    tab1_other, tab2_other, tab3_other, tab4_other = st.tabs(["1.General", "2.Location & DEM", "3.POIs & Output", "4.Run ▶️"])
 
-            if not use_lus_tlm:
-                config_content += f"LUS_PREVAH_CST = {lus_constant}\n"
+    # ============================================================
+    # Tab 1: General Settings (Other Locations)
+    # ============================================================
+    with tab1_other:
+        st.header("General Settings")
 
-            config_content += """DO_PVP_3D = false
-PVP_3D_FMT = vtu
-SP_BIN_PATH = snowpack
-"""
+        simu_name_other = st.text_input(
+            "Simulation Name",
+            value=st.session_state.config.get('simu_name', ''),
+            help="Unique name for this simulation (no spaces)",
+            key="simu_name_other"
+        )
 
-            # Save file
-            config_path = config_dir / f"{save_config_name}.ini"
-            with open(config_path, 'w') as f:
-                f.write(config_content)
+        st.divider()
+        st.info("Continue to the next tab: **2. Location & DEM**")
 
-            st.success(f"✅ Configuration saved to: {config_path}")
+    # ============================================================
+    # Tab 2: Location & DEM (Other Locations)
+    # ============================================================
+    with tab2_other:
+        st.header("Location & DEM Setup")
 
-    st.divider()
+        st.subheader("Target Coordinate System")
+        target_epsg = st.number_input(
+            "EPSG Code",
+            value=int(st.session_state.config.get('target_epsg', 32632)),
+            min_value=1000,
+            max_value=99999,
+            help="EPSG code for your target coordinate system (e.g., 32632 for UTM Zone 32N)"
+        )
 
-    # Run simulation section
-    st.header("Run")
+        st.subheader("DEM Selection")
+        st.markdown("Select your Digital Elevation Model (GeoTIFF) from the `config/dem/` directory")
+        st.caption("💡 **Docker users**: Place your DEM files in `config/dem/` (mounted volume)")
 
-    col1, col2 = st.columns([2, 1])
+        # Browse for DEM files in config/dem/
+        dem_dir = Path("config/dem")
+        dem_files = list(dem_dir.glob("*.tif")) + list(dem_dir.glob("*.tiff"))
 
-    with col1:
-        skip_snowpack = st.checkbox("Skip Snowpack preprocessing", value=False)
+        if dem_files:
+            dem_options = ["[Select a DEM file]"] + [dem.name for dem in dem_files]
+            selected_dem = st.selectbox(
+                "Available DEM files:",
+                options=dem_options,
+                help="GeoTIFF files found in config/dem/"
+            )
 
-        # VPN warning if Snowpack preprocessing is enabled
-        if not skip_snowpack:
-            st.warning("⚠️ **SLF/WSL VPN Required**: Snowpack preprocessing requires VPN access to the IMIS database via MeteoIO.")
+            if selected_dem != "[Select a DEM file]":
+                dem_path = dem_dir / selected_dem
+                st.success(f"✅ DEM selected: {selected_dem}")
+                st.session_state.config['user_dem_path'] = str(dem_path.absolute())
 
-        log_level = st.selectbox("Log Level", ["INFO", "DEBUG", "WARNING", "ERROR"])
-
-    with col2:
-        st.write("")  # Spacing
-        st.write("")  # Spacing
-
-    # Check if ROI is validated
-    roi_validated = st.session_state.get('roi_validated', False)
-
-    # Show validation status
-    if not roi_validated:
-        st.error("🚫 Cannot run simulation: ROI/POI must be confirmed within Swiss boundaries")
-        st.info("💡 Go to the **Location & ROI** tab to configure and validate your region of interest.")
-
-    # Disable button if validation failed
-    if st.button("▶️ Start Run", type="primary", use_container_width=True, disabled=not roi_validated):
-        if not simu_name:
-            st.error("Please provide a simulation name")
+                # Show file info
+                file_size_mb = dem_path.stat().st_size / (1024 * 1024)
+                st.info(f"📊 File size: {file_size_mb:.2f} MB")
+            else:
+                st.session_state.config['user_dem_path'] = None
         else:
-            # Create a temporary config for this run
-            temp_config = config_dir / f"_temp_{simu_name}.ini"
+            st.warning("⚠️ No DEM files found in `config/dem/`")
+            st.info("Place your GeoTIFF (.tif) DEM files in the `config/dem/` directory")
+            st.session_state.config['user_dem_path'] = None
 
-            config_content = f"""# Temporary A3Dshell Configuration
+        # Manual path input as fallback
+        with st.expander("Or enter DEM path manually"):
+            manual_dem_path = st.text_input(
+                "DEM file path:",
+                value=st.session_state.config.get('user_dem_path', ''),
+                help="Full path to DEM file (must be accessible from container)",
+                key="manual_dem_path_other"
+            )
+            if manual_dem_path and Path(manual_dem_path).exists():
+                st.session_state.config['user_dem_path'] = manual_dem_path
+                st.success(f"✅ Using manual path: {manual_dem_path}")
+
+        st.subheader("Region of Interest")
+        use_shapefile_other = st.checkbox(
+            "Use custom shapefile for ROI",
+            value=st.session_state.config.get('use_shapefile', False),
+            key="use_shapefile_other"
+        )
+
+        if use_shapefile_other:
+            shapefile_dir = Path("config/shapefiles")
+            available_shapefiles = find_shapefiles(shapefile_dir)
+
+            if available_shapefiles:
+                shapefile_options = [str(shp.relative_to(shapefile_dir.parent)) for shp in available_shapefiles]
+                roi_shapefile_other = st.selectbox(
+                    "Select Shapefile",
+                    options=shapefile_options,
+                    key="roi_shapefile_other"
+                )
+            else:
+                st.warning("⚠️ No shapefiles found in config/shapefiles/")
+                roi_shapefile_other = None
+        else:
+            roi_size_other = st.number_input(
+                "ROI Size (meters)",
+                value=int(st.session_state.config.get('roi_size', 1000)),
+                min_value=100,
+                max_value=50000,
+                step=100,
+                help="Square bounding box size around center point",
+                key="roi_size_other"
+            )
+
+            # Center point for ROI
+            col1, col2 = st.columns(2)
+            with col1:
+                roi_center_x = st.number_input(
+                    f"Center Easting (EPSG:{target_epsg})",
+                    value=float(st.session_state.config.get('poi_x', 500000)),
+                    key="roi_center_x_other"
+                )
+            with col2:
+                roi_center_y = st.number_input(
+                    f"Center Northing (EPSG:{target_epsg})",
+                    value=float(st.session_state.config.get('poi_y', 5000000)),
+                    key="roi_center_y_other"
+                )
+
+        st.divider()
+        st.info("Continue to the next tab: **3. POIs & Output**")
+
+    # ============================================================
+    # Tab 3: POIs & Output (Other Locations)
+    # ============================================================
+    with tab3_other:
+        st.header("Points of Interest (POIs)")
+
+        st.markdown("Define your Points of Interest for simulation. These will be written to the POI SMET file.")
+
+        # Initialize POI list in session state
+        if 'poi_list' not in st.session_state:
+            st.session_state.poi_list = []
+
+        # POI input form
+        with st.form("add_poi_form"):
+            st.subheader("Add New POI")
+            col1, col2, col3, col4 = st.columns(4)
+
+            with col1:
+                poi_name = st.text_input("POI Name", value="", placeholder="e.g., Station1")
+            with col2:
+                poi_x_new = st.number_input(f"Easting (EPSG:{target_epsg})", value=0.0, format="%.2f")
+            with col3:
+                poi_y_new = st.number_input(f"Northing (EPSG:{target_epsg})", value=0.0, format="%.2f")
+            with col4:
+                poi_z_new = st.number_input("Elevation (m)", value=0.0, format="%.2f")
+
+            add_button = st.form_submit_button("➕ Add POI")
+
+            if add_button and poi_name:
+                st.session_state.poi_list.append({
+                    'name': poi_name,
+                    'x': poi_x_new,
+                    'y': poi_y_new,
+                    'z': poi_z_new
+                })
+                st.success(f"✅ Added POI: {poi_name}")
+
+        # Display current POIs
+        if st.session_state.poi_list:
+            st.subheader("Current POIs")
+            for idx, poi in enumerate(st.session_state.poi_list):
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    st.text(f"{poi['name']}: ({poi['x']:.2f}, {poi['y']:.2f}, {poi['z']:.2f})")
+                with col2:
+                    if st.button("🗑️ Remove", key=f"remove_poi_{idx}"):
+                        st.session_state.poi_list.pop(idx)
+                        st.rerun()
+        else:
+            st.info("ℹ️ No POIs added yet. Add at least one POI above.")
+
+        st.divider()
+
+        st.subheader("Output Settings")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            gsd_other = st.number_input(
+                "Grid Spacing (GSD) in meters",
+                value=float(st.session_state.config.get('gsd', 10.0)),
+                min_value=0.5,
+                max_value=100.0,
+                step=0.5,
+                help="Resolution of output grids",
+                key="gsd_other"
+            )
+        with col2:
+            st.write("")  # Spacing
+
+        st.subheader("Land Use")
+        use_lus_tlm_other = st.checkbox(
+            "Use TLM land use data",
+            value=st.session_state.config.get('use_lus_tlm', False),
+            disabled=True,
+            help="Automatic download of Swiss topographic land use data - not available for other locations",
+            key="use_lus_tlm_other"
+        )
+
+        lus_constant_other = st.number_input(
+            "Constant Land Use Value",
+            value=int(st.session_state.config.get('lus_cst', 11500)),
+            help="Single PREVAH land use code (format: 1LLCD where LL is PREVAH code)",
+            key="lus_constant_other"
+        )
+
+        st.divider()
+        st.info("Continue to the next tab: **4. Run ▶️**")
+
+    # ============================================================
+    # Tab 4: Run (Other Locations)
+    # ============================================================
+    with tab4_other:
+        st.header("Setup & Run")
+
+        st.warning("⚠️ **Meteorological Data Required**: After setup completes, you must manually add your SMET meteorological files to `output/{simulation_name}/input/meteo/`")
+
+        # Save config button
+        st.subheader("Save Configuration")
+        col1, col2 = st.columns([3, 1])
+
+        with col1:
+            save_config_name_other = st.text_input(
+                "Config Filename (without .ini)",
+                value=simu_name_other if simu_name_other else "",
+                key="save_config_name_other"
+            )
+
+        with col2:
+            st.write("")  # Spacing
+            st.write("")  # Spacing
+            save_button_other = st.button("💾 Save Config", type="secondary", use_container_width=True, key="save_button_other")
+
+        if save_button_other:
+            if not save_config_name_other:
+                st.error("Please provide a config filename")
+            else:
+                # Create config file for Other Locations mode
+                config_content = f"""# A3Dshell Configuration - Other Locations Mode
+# Generated: {datetime.now().strftime('%Y-%m-%dT%H:%M:%S')}
+
 [GENERAL]
-SIMULATION_NAME = {simu_name}
-START_DATE = {start_dt.strftime('%Y-%m-%dT%H:%M:%S')}
-END_DATE = {end_dt.strftime('%Y-%m-%dT%H:%M:%S')}
+SIMULATION_NAME = {simu_name_other}
 
 [INPUT]
-EAST_epsg2056 = {poi_x}
-NORTH_epsg2056 = {poi_y}
-altLV95 = {poi_z}
-USE_SHP_ROI = {'true' if use_shapefile else 'false'}
+DEM_MODE = user_provided
+USER_DEM_PATH = {st.session_state.config.get('user_dem_path', '')}
+TARGET_EPSG = {target_epsg}
+USE_SHP_ROI = {'true' if use_shapefile_other else 'false'}
 """
 
-            if use_shapefile:
-                config_content += f"ROI_SHAPEFILE = {roi_shapefile}\n"
+                if use_shapefile_other and 'roi_shapefile_other' in locals():
+                    config_content += f"ROI_SHAPEFILE = {roi_shapefile_other}\n"
+                else:
+                    config_content += f"ROI = {roi_size_other}\n"
+                    config_content += f"ROI_CENTER_X = {roi_center_x}\n"
+                    config_content += f"ROI_CENTER_Y = {roi_center_y}\n"
+
+                config_content += "\n[OUTPUT]\n"
+                config_content += f"OUT_COORDSYS = EPSG:{target_epsg}\n"
+                config_content += f"GSD = {gsd_other}\n"
+                config_content += "DEM_ADDFMTLIST =\n"
+                config_content += "MESH_FMT = vtu\n"
+                config_content += "\n[MAPS]\n"
+                config_content += "PLOT_HORIZON = false\n"
+                config_content += "\n[A3D]\n"
+                config_content += "USE_GROUNDEYE = false\n"
+                config_content += "USE_LUS_TLM = false\n"
+                config_content += f"LUS_PREVAH_CST = {lus_constant_other}\n"
+                config_content += "DO_PVP_3D = false\n"
+                config_content += "PVP_3D_FMT = vtu\n"
+                config_content += "SP_BIN_PATH = input/bin/snowpack\n"
+
+                # Save POIs to config
+                if st.session_state.poi_list:
+                    config_content += "\n[POIS]\n"
+                    for poi in st.session_state.poi_list:
+                        config_content += f"{poi['name']} = {poi['x']},{poi['y']},{poi['z']}\n"
+
+                # Save file
+                config_dir = Path("config")
+                config_path = config_dir / f"{save_config_name_other}.ini"
+                with open(config_path, 'w') as f:
+                    f.write(config_content)
+
+                st.success(f"✅ Configuration saved to: {config_path}")
+
+        st.divider()
+
+        # Run simulation section
+        st.subheader("Run Setup")
+
+        log_level_other = st.selectbox("Log Level", ["INFO", "DEBUG", "WARNING", "ERROR"], key="log_level_other")
+
+        if st.button("▶️ Start Run", type="primary", use_container_width=True, key="run_button_other"):
+            if not simu_name_other:
+                st.error("Please provide a simulation name")
+            elif not st.session_state.config.get('user_dem_path'):
+                st.error("Please upload a DEM file")
+            elif not st.session_state.poi_list:
+                st.error("Please add at least one POI")
             else:
-                config_content += f"ROI = {roi_size}\n"
+                # Create temporary config for this run
+                temp_config = Path("config") / f"_temp_{simu_name_other}.ini"
 
-            config_content += f"""BUFFERSIZE = {buffer_size}
+                config_content = f"""# Temporary A3Dshell Configuration - Other Locations
+[GENERAL]
+SIMULATION_NAME = {simu_name_other}
 
-[OUTPUT]
-OUT_COORDSYS = {coord_sys}
-GSD = {gsd}
-GSD_ref = {gsd_ref}
-DEM_ADDFMTLIST =
-MESH_FMT = vtu
-
-[MAPS]
-PLOT_HORIZON = false
-
-[A3D]
-USE_GROUNDEYE = false
-USE_LUS_TLM = {'true' if use_lus_tlm else 'false'}
+[INPUT]
+DEM_MODE = user_provided
+USER_DEM_PATH = {st.session_state.config.get('user_dem_path', '')}
+TARGET_EPSG = {target_epsg}
+USE_SHP_ROI = {'true' if use_shapefile_other else 'false'}
 """
 
-            if not use_lus_tlm:
-                config_content += f"LUS_PREVAH_CST = {lus_constant}\n"
+                if use_shapefile_other and 'roi_shapefile_other' in locals():
+                    config_content += f"ROI_SHAPEFILE = {roi_shapefile_other}\n"
+                else:
+                    config_content += f"ROI = {roi_size_other}\n"
+                    config_content += f"ROI_CENTER_X = {roi_center_x}\n"
+                    config_content += f"ROI_CENTER_Y = {roi_center_y}\n"
 
-            config_content += """DO_PVP_3D = false
-PVP_3D_FMT = vtu
-SP_BIN_PATH = snowpack
-"""
+                config_content += "\n[OUTPUT]\n"
+                config_content += f"OUT_COORDSYS = EPSG:{target_epsg}\n"
+                config_content += f"GSD = {gsd_other}\n"
+                config_content += "DEM_ADDFMTLIST =\n"
+                config_content += "MESH_FMT = vtu\n"
+                config_content += "\n[MAPS]\n"
+                config_content += "PLOT_HORIZON = false\n"
+                config_content += "\n[A3D]\n"
+                config_content += "USE_GROUNDEYE = false\n"
+                config_content += "USE_LUS_TLM = false\n"
+                config_content += f"LUS_PREVAH_CST = {lus_constant_other}\n"
+                config_content += "DO_PVP_3D = false\n"
+                config_content += "PVP_3D_FMT = vtu\n"
+                config_content += "SP_BIN_PATH = input/bin/snowpack\n"
 
-            # Save temp config
-            with open(temp_config, 'w') as f:
-                f.write(config_content)
+                # Add POIs
+                if st.session_state.poi_list:
+                    config_content += "\n[POIS]\n"
+                    for poi in st.session_state.poi_list:
+                        config_content += f"{poi['name']} = {poi['x']},{poi['y']},{poi['z']}\n"
 
-            # Build command
-            cmd = [
-                "python", "-m", "src.cli",
-                "--config", str(temp_config),
-                "--log-level", log_level
-            ]
+                with open(temp_config, 'w') as f:
+                    f.write(config_content)
 
-            if skip_snowpack:
-                cmd.append("--skip-snowpack")
+                # Run command (no Snowpack preprocessing for Other Locations)
+                cmd = [
+                    "python", "-m", "src.cli",
+                    "--config", str(temp_config),
+                    "--log-level", log_level_other,
+                    "--skip-snowpack"  # Always skip Snowpack for Other Locations
+                ]
 
-            st.info(f"🚀 Starting simulation: {simu_name}")
-            st.code(" ".join(cmd), language="bash")
+                with st.spinner("⏳ Running setup... This may take a few minutes"):
+                    try:
+                        process = subprocess.Popen(
+                            cmd,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,
+                            text=True,
+                            bufsize=1
+                        )
 
-            # Run simulation
-            with st.spinner("Running simulation... (this may take several minutes)"):
-                try:
-                    result = subprocess.run(
-                        cmd,
-                        capture_output=True,
-                        text=True,
-                        timeout=3600  # 1 hour timeout
-                    )
+                        log_placeholder = st.empty()
+                        full_log = []
 
-                    # Display output
-                    st.subheader("Output")
-                    st.text_area("Run Log", value=result.stdout, height=400)
+                        for line in process.stdout:
+                            full_log.append(line)
+                            log_placeholder.code('\n'.join(full_log[-50:]))  # Show last 50 lines
 
-                    if result.returncode == 0:
-                        st.success("✅ Run completed successfully!")
-                        st.snow()
+                        process.wait()
 
-                        # Show output location
-                        output_dir = Path("output") / simu_name
-                        if output_dir.exists():
-                            st.info(f"📁 Output location: {output_dir}")
-                    else:
-                        st.error(f"❌ Run failed with exit code {result.returncode}")
-                        if result.stderr:
-                            st.error("Error output:")
-                            st.code(result.stderr)
+                        if process.returncode == 0:
+                            st.success("✅ Setup completed successfully!")
+                            st.info(f"📁 **Next Steps**: Add your SMET meteorological files to `output/{simu_name_other}/input/meteo/`")
+                        else:
+                            st.error(f"❌ Setup failed with exit code {process.returncode}")
 
-                except subprocess.TimeoutExpired:
-                    st.error("⏱️ Run timed out (> 1 hour)")
-                except Exception as e:
-                    st.error(f"❌ Error running simulation: {str(e)}")
+                    except Exception as e:
+                        st.error(f"❌ Error running setup: {str(e)}")
 
-                finally:
-                    # Clean up temp config
-                    if temp_config.exists():
-                        temp_config.unlink()
+                    finally:
+                        # Clean up temp config
+                        if temp_config.exists():
+                            temp_config.unlink()
 
 # Footer
 st.divider()

@@ -20,18 +20,28 @@ class SimulationConfig:
 
     # General
     simu_name: str
-    start_date: datetime
-    end_date: datetime
+    start_date: Optional[datetime] = None  # Optional for Other Locations mode
+    end_date: Optional[datetime] = None    # Optional for Other Locations mode
 
-    # Point of Interest
-    poi_x: float  # Easting EPSG:2056
-    poi_y: float  # Northing EPSG:2056
-    poi_z: float  # Altitude LV95
+    # DEM Mode
+    dem_mode: str = "swisstopo"  # "swisstopo" or "user_provided"
+    user_dem_path: Optional[str] = None  # Path to user DEM (for Other Locations)
+    target_epsg: Optional[int] = None  # Target EPSG code (for Other Locations)
+
+    # Point of Interest (single POI for Switzerland mode)
+    poi_x: Optional[float] = None  # Easting EPSG:2056 or target CRS
+    poi_y: Optional[float] = None  # Northing EPSG:2056 or target CRS
+    poi_z: Optional[float] = None  # Altitude
+
+    # Multiple POIs (for Other Locations mode)
+    pois: List[Dict[str, Any]] = field(default_factory=list)  # List of {'name': str, 'x': float, 'y': float, 'z': float}
 
     # ROI
     use_shp_roi: bool = False
     roi_shapefile: Optional[str] = None  # Path to shapefile (if use_shp_roi=True)
     roi_size: int = 1000  # ROI size in meters (if use_shp_roi=False)
+    roi_center_x: Optional[float] = None  # ROI center X (for Other Locations bbox mode)
+    roi_center_y: Optional[float] = None  # ROI center Y (for Other Locations bbox mode)
     buffer_size: int = 50000  # Buffer for IMIS station selection
 
     # Output
@@ -57,19 +67,56 @@ class SimulationConfig:
 
     def __post_init__(self):
         """Validate configuration after initialization."""
-        # Ensure dates are datetime objects
-        if isinstance(self.start_date, str):
-            self.start_date = datetime.strptime(self.start_date, '%Y-%m-%dT%H:%M:%S')
-        if isinstance(self.end_date, str):
-            self.end_date = datetime.strptime(self.end_date, '%Y-%m-%dT%H:%M:%S')
-
         # Validate simulation name
         if " " in self.simu_name:
             raise ValueError("Simulation name cannot contain whitespaces")
 
-        # Validate date range
-        if self.start_date >= self.end_date:
-            raise ValueError("Start date must be before end date")
+        # DEM mode validation
+        if self.dem_mode not in ["swisstopo", "user_provided"]:
+            raise ValueError(f"Invalid DEM_MODE: {self.dem_mode}. Must be 'swisstopo' or 'user_provided'")
+
+        # Switzerland mode validations
+        if self.dem_mode == "swisstopo":
+            # Ensure dates are datetime objects
+            if self.start_date and isinstance(self.start_date, str):
+                self.start_date = datetime.strptime(self.start_date, '%Y-%m-%dT%H:%M:%S')
+            if self.end_date and isinstance(self.end_date, str):
+                self.end_date = datetime.strptime(self.end_date, '%Y-%m-%dT%H:%M:%S')
+
+            # Validate dates are provided for Switzerland mode
+            if not self.start_date or not self.end_date:
+                raise ValueError("START_DATE and END_DATE are required for Switzerland mode (DEM_MODE=swisstopo)")
+
+            # Validate date range
+            if self.start_date >= self.end_date:
+                raise ValueError("Start date must be before end date")
+
+            # Validate single POI for Switzerland mode
+            if self.poi_x is None or self.poi_y is None or self.poi_z is None:
+                raise ValueError("POI coordinates (EAST_epsg2056, NORTH_epsg2056, altLV95) are required for Switzerland mode")
+
+        # Other Locations mode validations
+        elif self.dem_mode == "user_provided":
+            # Validate user DEM path
+            if not self.user_dem_path:
+                raise ValueError("USER_DEM_PATH is required for Other Locations mode (DEM_MODE=user_provided)")
+
+            dem_path = Path(self.user_dem_path)
+            if not dem_path.exists():
+                raise FileNotFoundError(f"User DEM file not found: {self.user_dem_path}")
+
+            # Validate target EPSG
+            if not self.target_epsg:
+                raise ValueError("TARGET_EPSG is required for Other Locations mode")
+
+            # Validate POIs list
+            if not self.pois or len(self.pois) == 0:
+                raise ValueError("At least one POI must be defined in [POIS] section for Other Locations mode")
+
+            # Validate ROI center for bbox mode
+            if not self.use_shp_roi:
+                if self.roi_center_x is None or self.roi_center_y is None:
+                    raise ValueError("ROI_CENTER_X and ROI_CENTER_Y are required for bounding box mode in Other Locations")
 
         # Check shapefile path if using shapefile ROI
         if self.use_shp_roi and not self.roi_shapefile:
@@ -140,31 +187,49 @@ class ConfigManager:
         if "GENERAL" in config:
             section = config["GENERAL"]
             config_dict["simu_name"] = section["SIMULATION_NAME"]
-            config_dict["start_date"] = datetime.strptime(
-                section["START_DATE"], '%Y-%m-%dT%H:%M:%S'
-            )
-            config_dict["end_date"] = datetime.strptime(
-                section["END_DATE"], '%Y-%m-%dT%H:%M:%S'
-            )
+
+            # Dates are optional (for Other Locations mode)
+            if "START_DATE" in section:
+                config_dict["start_date"] = datetime.strptime(
+                    section["START_DATE"], '%Y-%m-%dT%H:%M:%S'
+                )
+            if "END_DATE" in section:
+                config_dict["end_date"] = datetime.strptime(
+                    section["END_DATE"], '%Y-%m-%dT%H:%M:%S'
+                )
 
         # INPUT section
         if "INPUT" in config:
             section = config["INPUT"]
-            poi_x = float(section["EAST_epsg2056"])
-            poi_y = float(section["NORTH_epsg2056"])
 
-            # Auto-detect and convert old CH1903 coordinates to CH1903+ (EPSG:2056)
-            # CH1903 coordinates are typically 5-6 digits (e.g., 645000, 115000)
-            # CH1903+ coordinates are 7 digits (e.g., 2645000, 1115000)
-            if poi_x < 1000000:
-                logger.warning(f"Detected old CH1903 coordinates ({poi_x}, {poi_y})")
-                logger.warning(f"Converting to CH1903+ (EPSG:2056): ({poi_x + 2000000}, {poi_y + 1000000})")
-                poi_x += 2000000
-                poi_y += 1000000
+            # DEM Mode
+            config_dict["dem_mode"] = section.get("DEM_MODE", "swisstopo")
 
-            config_dict["poi_x"] = poi_x
-            config_dict["poi_y"] = poi_y
-            config_dict["poi_z"] = float(section["altLV95"])
+            # User-provided DEM (Other Locations mode)
+            if "USER_DEM_PATH" in section:
+                config_dict["user_dem_path"] = section["USER_DEM_PATH"]
+            if "TARGET_EPSG" in section:
+                config_dict["target_epsg"] = int(section["TARGET_EPSG"])
+
+            # Single POI (Switzerland mode) - optional now
+            if "EAST_epsg2056" in section:
+                poi_x = float(section["EAST_epsg2056"])
+                poi_y = float(section["NORTH_epsg2056"])
+
+                # Auto-detect and convert old CH1903 coordinates to CH1903+ (EPSG:2056)
+                # CH1903 coordinates are typically 5-6 digits (e.g., 645000, 115000)
+                # CH1903+ coordinates are 7 digits (e.g., 2645000, 1115000)
+                if poi_x < 1000000:
+                    logger.warning(f"Detected old CH1903 coordinates ({poi_x}, {poi_y})")
+                    logger.warning(f"Converting to CH1903+ (EPSG:2056): ({poi_x + 2000000}, {poi_y + 1000000})")
+                    poi_x += 2000000
+                    poi_y += 1000000
+
+                config_dict["poi_x"] = poi_x
+                config_dict["poi_y"] = poi_y
+                config_dict["poi_z"] = float(section["altLV95"])
+
+            # ROI settings
             config_dict["use_shp_roi"] = config.getboolean("INPUT", "USE_SHP_ROI")
             config_dict["roi_size"] = int(section.get("ROI", "1000"))
             config_dict["buffer_size"] = int(section.get("BUFFERSIZE", "50000"))
@@ -172,6 +237,29 @@ class ConfigManager:
             # Check for ROI_SHAPEFILE
             if "ROI_SHAPEFILE" in section:
                 config_dict["roi_shapefile"] = section["ROI_SHAPEFILE"]
+
+            # ROI center (for Other Locations bbox mode)
+            if "ROI_CENTER_X" in section:
+                config_dict["roi_center_x"] = float(section["ROI_CENTER_X"])
+            if "ROI_CENTER_Y" in section:
+                config_dict["roi_center_y"] = float(section["ROI_CENTER_Y"])
+
+        # POIS section (for Other Locations mode)
+        if "POIS" in config:
+            pois_list = []
+            for poi_name, poi_coords in config["POIS"].items():
+                # Parse comma-separated coordinates: x,y,z
+                coords = poi_coords.split(',')
+                if len(coords) == 3:
+                    pois_list.append({
+                        'name': poi_name,
+                        'x': float(coords[0].strip()),
+                        'y': float(coords[1].strip()),
+                        'z': float(coords[2].strip())
+                    })
+                else:
+                    logger.warning(f"Skipping invalid POI entry: {poi_name} = {poi_coords}")
+            config_dict["pois"] = pois_list
 
         # OUTPUT section
         if "OUTPUT" in config:
@@ -211,21 +299,31 @@ class ConfigManager:
         Raises:
             ValueError: If required fields are missing
         """
-        required_fields = [
-            "simu_name",
-            "start_date",
-            "end_date",
-            "poi_x",
-            "poi_y",
-            "poi_z"
-        ]
+        # Simulation name is always required
+        if "simu_name" not in config_dict:
+            raise ValueError("Missing required field: simu_name")
 
-        missing_fields = [field for field in required_fields if field not in config_dict]
+        # DEM mode determines which other fields are required
+        dem_mode = config_dict.get("dem_mode", "swisstopo")
 
-        if missing_fields:
-            raise ValueError(
-                f"Missing required configuration fields: {', '.join(missing_fields)}"
-            )
+        if dem_mode == "swisstopo":
+            # Switzerland mode: require dates and single POI
+            required_fields = ["start_date", "end_date", "poi_x", "poi_y", "poi_z"]
+            missing_fields = [field for field in required_fields if field not in config_dict]
+
+            if missing_fields:
+                raise ValueError(
+                    f"Missing required configuration fields for Switzerland mode: {', '.join(missing_fields)}"
+                )
+        elif dem_mode == "user_provided":
+            # Other Locations mode: require user DEM, target EPSG, and POIs
+            required_fields = ["user_dem_path", "target_epsg", "pois"]
+            missing_fields = [field for field in required_fields if field not in config_dict]
+
+            if missing_fields:
+                raise ValueError(
+                    f"Missing required configuration fields for Other Locations mode: {', '.join(missing_fields)}"
+                )
 
     @staticmethod
     def create_default_ini(output_path: Path) -> None:
