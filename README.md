@@ -56,6 +56,8 @@ For other Linux distributions, see: https://docs.docker.com/engine/install/
 git clone https://github.com/frischwood/A3Dshell.git
 cd a3dshell
 
+# Login to github registry with your github credentials
+docker login ghcr.io 
 # Pull the latest Docker image
 docker pull ghcr.io/frischwood/A3Dshell:latest
 
