@@ -18,6 +18,21 @@ A3DShell automates the preparation of Alpine3D simulation inputs:
 - **INI Configuration**: Easy configuration file management
 - **Auto Packaging**: Everything zipped and ready to go
 
+## Demo
+
+<p align="center">
+  <img src="docs/images/demo.gif" alt="A3DShell Demo Workflow" width="900"/>
+</p>
+
+**Quick walkthrough:**
+1. Select your region of interest on the interactive map
+2. Configure simulation period and parameters
+3. Set point of interest (POI) location
+4. Click "Start Run" to generate your simulation setup
+5. Get a ready-to-use Alpine3D simulation folder
+
+> **Tip**: A3DShell supports both **Switzerland mode** (with automatic IMIS data) and **Other Locations mode** (bring your own DEM and meteorological data).
+
 ## Installation
 
 ### Option 1: Docker - Pre-built Image (Recommended!)
