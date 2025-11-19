@@ -362,11 +362,11 @@ selected_config = st.sidebar.selectbox(
 
 # Build Info section in sidebar
 st.sidebar.divider()
-st.sidebar.header("ℹ️ About")
+st.sidebar.header("About")
 
 build_info = get_build_info()
 if build_info:
-    with st.sidebar.expander("🐳 Docker Build Info", expanded=False):
+    with st.sidebar.expander("Docker Build Info", expanded=False):
         st.code(build_info, language=None)
         st.caption("This information shows the exact versions of MeteoIO and Snowpack compiled into this Docker image.")
 else:
@@ -905,17 +905,18 @@ with mode_tab_switzerland:
     with tab4:
         st.header("Meteo files retrieval with Snowpack")
         
-        skip_snowpack = st.checkbox("Skip Snowpack preprocessing", 
+        skip_snowpack = st.checkbox("Skip Snowpack preprocessing",
                                     value=False,
                                     help="Disable Snowpack preprocessing step. Meteo files will not be downloaded and preprocessed (RSWR --> ISWR).")
-        
+
         buffer_size = st.number_input(
             "Buffer Size for IMIS Stations (meters)",
             value=int(st.session_state.config.get('buffer_size', 10000)),
             min_value=1000,
             max_value=200000,
             step=1000,
-            help="Distance to search for meteorological stations around the ROI"
+            help="Distance to search for meteorological stations around the ROI",
+            disabled=skip_snowpack
         )
 
         # VPN warning if Snowpack preprocessing is enabled
