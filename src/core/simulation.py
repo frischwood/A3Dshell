@@ -317,7 +317,8 @@ class SimulationOrchestrator:
             gsd=self.config.gsd,
             gsd_ref=self.config.gsd_ref,
             target_crs=target_crs,
-            dem_formats=self.config.dem_add_fmt_list
+            dem_formats=self.config.dem_add_fmt_list,
+            mask_to_polygon=self.config.mask_dem_to_polygon
         )
 
         return dem_file

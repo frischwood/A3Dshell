@@ -420,7 +420,7 @@ with mode_tab_switzerland:
     st.info("ℹ️ **Switzerland Mode**: Automatic DEM download from Swisstopo, IMIS station data via MeteoIO, and Snowpack preprocessing")
 
     # Tabs for configuration sections
-    tab1, tab2, tab3, tab4 = st.tabs(["1.General", "2.Location & ROI", "3.Output", "4.Run ▶️"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["1.General", "2.ROI/DEM", "3.Landcover", "4.Meteo", "5.Run ▶️"])
 
     # ============================================================
     # Tab 1: General Settings
@@ -609,9 +609,29 @@ with mode_tab_switzerland:
                     # Show warning if no polygon drawn yet
                     if not roi_shapefile:
                         st.warning("⚠️ No polygon drawn yet. Use the drawing tools on the map.")
+
+            # DEM Masking option (only for shapefile/polygon mode)
+            st.divider()
+            st.subheader("🗺️ DEM Masking Options")
+
+            mask_dem = st.checkbox(
+                "Mask DEM to polygon shape",
+                value=True,
+                help="If checked, DEM is cropped to polygon (values outside = nodata). "
+                     "If unchecked, DEM covers entire bounding box with all valid values.",
+                key="mask_dem_checkbox"
+            )
+            st.session_state.config['mask_dem_to_polygon'] = mask_dem
+
+            if not mask_dem:
+                st.info("DEM will cover the full bounding box with all valid values. LUS will still be masked to the polygon.")
+            else:
+                st.info("DEM will be cropped to the polygon shape. Values outside the polygon will be set to nodata.")
         else:
             # Bounding box mode - need center point coordinates
-            st.markdown("### 📍 ROI Center Point")
+            # Always mask DEM for bbox mode
+            st.session_state.config['mask_dem_to_polygon'] = True
+            st.markdown("### ROI Center Point")
     
             # Option to pick point on map or enter manually
             center_point_option = st.radio(
@@ -744,54 +764,44 @@ with mode_tab_switzerland:
                 st.error(boundary_msg)
                 st.warning("⚠️ Please adjust the center point or reduce the ROI size to fit within Switzerland.")
                 st.session_state['roi_validated'] = False
-    
-        # Buffer size applies to both shapefile and bounding box modes
-        buffer_size = st.number_input(
-            "Buffer Size for IMIS Stations (meters)",
-            value=int(st.session_state.config.get('buffer_size', 10000)),
-            min_value=1000,
-            max_value=200000,
-            step=1000,
-            help="Distance to search for meteorological stations"
-        )
-    
+
         # When using shapefile, POI is derived from ROI center (no manual input needed)
         if use_shapefile:
             # Set default POI values (will be overridden by backend from shapefile)
             poi_x = float(st.session_state.config.get('poi_x', 645000))
             poi_y = float(st.session_state.config.get('poi_y', 115000))
             poi_z = float(st.session_state.config.get('poi_z', 1500))
-    
+
         st.divider()
-        st.info("Continue to the next tab: **3. Output**")
-    
-    # ============================================================
-    # Tab 3: Output Settings
-    # ============================================================
-    with tab3:
-        st.header("Output Settings")
-    
+
+        # Output resolution settings
         col1, col2 = st.columns(2)
-    
+
         with col1:
-            gsd = st.number_input(
-                "Grid Spacing (GSD) - meters",
-                value=float(st.session_state.config.get('gsd', 10.0)),
-                min_value=1.0,
-                max_value=100.0,
-                step=1.0,
-                help="Output resolution (smaller = higher resolution, longer processing)"
-            )
-    
-        with col2:
             gsd_ref = st.selectbox(
                 "Reference DEM Resolution",
                 [0.5, 2.0],
                 index=[0.5, 2.0].index(float(st.session_state.config.get('gsd_ref', 2.0))),
                 help="Source DEM resolution from Swisstopo"
             )
-    
+
+        with col2:
+            gsd = st.number_input(
+                "Output Grid Spacing - meters",
+                value=float(st.session_state.config.get('gsd', 10.0)),
+                min_value=1.0,
+                max_value=100.0,
+                step=1.0,
+                help="Output resolution (smaller = higher resolution, longer processing)"
+            )
+
         st.divider()
+        st.info("Continue to the next tab: **3. Landcover**")
+    
+    # ============================================================
+    # Tab 3: Landcover
+    # ============================================================
+    with tab3:
         st.header("Land Use")
     
         st.info("ℹ️ SwissTLMRegio integration is a future feature. Currently, only constant land use values are supported.")
@@ -810,12 +820,36 @@ with mode_tab_switzerland:
         )
     
         st.divider()
-        st.info("Continue to the next tab: **4. Run ▶️**")
-    
+        st.info("Continue to the next tab: **4. Meteo**")
+
     # ============================================================
-    # Tab 4: Run tool
+    # Tab 4: Meteo Settings
     # ============================================================
     with tab4:
+        st.header("Meteorological Settings")
+
+        buffer_size = st.number_input(
+            "Buffer Size for IMIS Stations (meters)",
+            value=int(st.session_state.config.get('buffer_size', 10000)),
+            min_value=1000,
+            max_value=200000,
+            step=1000,
+            help="Distance to search for meteorological stations around the ROI"
+        )
+
+        skip_snowpack = st.checkbox("Skip Snowpack preprocessing", value=False)
+
+        # VPN warning if Snowpack preprocessing is enabled
+        if not skip_snowpack:
+            st.warning("⚠️ **SLF/WSL VPN Required**: Snowpack preprocessing requires VPN access to the IMIS database via MeteoIO.")
+
+        st.divider()
+        st.info("Continue to the next tab: **5. Run ▶️**")
+
+    # ============================================================
+    # Tab 5: Run tool
+    # ============================================================
+    with tab5:
         st.header("Configuration Summary")
     
         # Build start/end datetime strings
@@ -887,6 +921,7 @@ USE_SHP_ROI = {'true' if use_shapefile else 'false'}
                 config_content += f"GSD_ref = {gsd_ref}\n"
                 config_content += f"DEM_ADDFMTLIST =\n"
                 config_content += f"MESH_FMT = vtu\n"
+                config_content += f"MASK_DEM_TO_POLYGON = {'true' if st.session_state.config.get('mask_dem_to_polygon', True) else 'false'}\n"
                 config_content += f"\n[MAPS]\n"
                 config_content += f"PLOT_HORIZON = false\n"
                 config_content += f"\n[A3D]\n"
@@ -908,19 +943,13 @@ USE_SHP_ROI = {'true' if use_shapefile else 'false'}
                 st.success(f"✅ Configuration saved to: {config_path}")
     
         st.divider()
-    
+
         # Run simulation section
         st.header("Run Setup")
-    
+
         col1, col2 = st.columns([2, 1])
-    
+
         with col1:
-            skip_snowpack = st.checkbox("Skip Snowpack preprocessing", value=False)
-    
-            # VPN warning if Snowpack preprocessing is enabled
-            if not skip_snowpack:
-                st.warning("⚠️ **SLF/WSL VPN Required**: Snowpack preprocessing requires VPN access to the IMIS database via MeteoIO.")
-    
             log_level = st.selectbox("Log Level", ["INFO", "DEBUG", "WARNING", "ERROR"])
     
         with col2:
@@ -968,6 +997,7 @@ USE_SHP_ROI = {'true' if use_shapefile else 'false'}
                 config_content += f"GSD_ref = {gsd_ref}\n"
                 config_content += f"DEM_ADDFMTLIST =\n"
                 config_content += f"MESH_FMT = vtu\n"
+                config_content += f"MASK_DEM_TO_POLYGON = {'true' if st.session_state.config.get('mask_dem_to_polygon', True) else 'false'}\n"
                 config_content += f"\n[MAPS]\n"
                 config_content += f"PLOT_HORIZON = false\n"
                 config_content += f"\n[A3D]\n"

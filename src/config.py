@@ -50,6 +50,7 @@ class SimulationConfig:
     gsd_ref: float = 2.0  # Reference DEM resolution
     dem_add_fmt_list: List[str] = field(default_factory=lambda: [""])
     mesh_fmt: str = "vtu"
+    mask_dem_to_polygon: bool = True  # Mask DEM to polygon shape (vs full bbox)
 
     # Maps
     plot_horizon: bool = True
@@ -276,6 +277,10 @@ class ConfigManager:
 
             config_dict["dem_add_fmt_list"] = [section.get("DEM_ADDFMTLIST", "")]
             config_dict["mesh_fmt"] = section.get("MESH_FMT", "vtu")
+
+            # DEM masking option (optional, defaults to True)
+            if "MASK_DEM_TO_POLYGON" in section:
+                config_dict["mask_dem_to_polygon"] = config.getboolean("OUTPUT", "MASK_DEM_TO_POLYGON")
 
         # MAPS section
         if "MAPS" in config:

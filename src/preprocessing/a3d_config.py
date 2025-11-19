@@ -175,26 +175,28 @@ class A3DConfigurator:
         template_path: Path,
         dict_path: Path
     ) -> None:
-        """Create .sno files using template."""
+        """Create .sno files using LUS-specific or fallback templates."""
         # Load settings
         with open(dict_path, "rb") as f:
             sno_dict = pickle.load(f)
 
-        # Setup Jinja2
+        # Setup Jinja2 environment for templates
         template_loader = jinja2.FileSystemLoader(template_path.parent)
         template_env = jinja2.Environment(loader=template_loader)
-        template = template_env.get_template(template_path.name)
 
         # Use first station for metadata
         first_station = imis_stations.iloc[0]
 
-        # Update dictionary
+        # Update dictionary with station metadata
         sno_dict.update(
             EXPERIMENT=self.config.simu_name,
             station_id=first_station["ID"],
             latitude=first_station["LATITUDE"],
             longitude=first_station["LONGITUDE"],
             altitude=first_station["ELEVATION"],
+            nodata=-999,
+            tz=1,
+            station_name=first_station.get("NAME", first_station["ID"]),
             nsoillayerdata=0,
             data=""
         )
@@ -202,8 +204,23 @@ class A3DConfigurator:
         # Create .sno for each LUS
         sno_dir = self.paths.get_simu_snowfiles_dir()
         for lus_value in unique_lus:
+            lus_code = int(lus_value)
+
+            # Try LUS-specific template first
+            lus_template_path = template_path.parent / f"lus_{lus_code}.sno"
+
+            if lus_template_path.exists():
+                # Use LUS-specific template
+                template = template_env.get_template(f"lus_{lus_code}.sno")
+                logger.debug(f"   Using LUS-specific template for {lus_code}")
+            else:
+                # Fall back to generic template
+                template = template_env.get_template(template_path.name)
+                logger.debug(f"   Using fallback template for {lus_code}")
+
+            # Render and save
             sno_output = template.render(sno_dict)
-            sno_file = sno_dir / f"{self.config.simu_name}_{int(lus_value)}.sno"
+            sno_file = sno_dir / f"{self.config.simu_name}_{lus_code}.sno"
             sno_file.write_text(sno_output)
 
     def _create_basic_sno_files(self, unique_lus: List[int], imis_stations) -> None:

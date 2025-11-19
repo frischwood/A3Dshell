@@ -56,7 +56,8 @@ class DEMProcessor:
         gsd: float,
         gsd_ref: float,
         target_crs: str,
-        dem_formats: List[str] = None
+        dem_formats: List[str] = None,
+        mask_to_polygon: bool = True
     ) -> Path:
         """
         Complete DEM processing pipeline.
@@ -67,6 +68,7 @@ class DEMProcessor:
             gsd_ref: Reference DEM resolution (2.0 or 0.5)
             target_crs: Target coordinate system (e.g., "EPSG:2056")
             dem_formats: Additional output formats (e.g., ["tif"])
+            mask_to_polygon: Whether to mask DEM to polygon shape (default: True)
 
         Returns:
             Path to processed DEM file (.asc)
@@ -104,9 +106,13 @@ class DEMProcessor:
         else:
             logger.info(f"4. No downsampling needed (GSD {gsd}m <= ref {gsd_ref}m)")
 
-        # 5. Crop to ROI
-        logger.info("5. Cropping to ROI")
-        self._crop_to_roi(merged_file, merged_file, roi, target_crs)
+        # 5. Crop to ROI (optional for polygon ROIs)
+        if mask_to_polygon or not roi.shapefile_path:
+            # Always mask for bbox mode, optional for polygon mode
+            logger.info("5. Cropping to ROI")
+            self._crop_to_roi(merged_file, merged_file, roi, target_crs)
+        else:
+            logger.info("5. Skipping ROI crop (using full bounding box)")
 
         logger.info(f"DEM processing complete: {output_file}")
         return output_file
