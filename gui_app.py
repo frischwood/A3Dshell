@@ -573,14 +573,28 @@ with mode_tab_switzerland:
                         help="Output resolution (smaller = higher resolution, longer processing). Must be >= reference DEM resolution."
                     )
 
+                    mask_lus = st.checkbox(
+                        "Mask LUS to polygon shape",
+                        value=True,
+                        help="If checked, LUS (land use surface) is cropped to polygon. "
+                             "If unchecked, LUS covers entire bounding box. "
+                             "Note: Grid extent is always the bounding box.",
+                        key="mask_lus_checkbox_existing_shp"
+                    )
+                    st.session_state.config['mask_lus_to_polygon'] = mask_lus
+
                     mask_dem = st.checkbox(
                         "Mask DEM to polygon shape",
-                        value=True,
+                        value=mask_lus,  # Default to same as LUS
+                        disabled=not mask_lus,  # Can only enable if LUS is masked
                         help="If checked, DEM is cropped to polygon (values outside = nodata). "
-                             "If unchecked, DEM covers entire bounding box with all valid values.",
+                             "If unchecked, DEM covers entire bounding box with all valid values. "
+                             "Note: Grid extent is always the bounding box. "
+                             "Cannot be checked if LUS masking is disabled.",
                         key="mask_dem_checkbox_existing_shp"
                     )
-                    st.session_state.config['mask_dem_to_polygon'] = mask_dem
+                    # DEM can only be masked if LUS is also masked
+                    st.session_state.config['mask_dem_to_polygon'] = mask_dem if mask_lus else False
             else:
                 # Interactive map for drawing ROI
                 st.markdown("### Draw ROI on Swiss Map")
@@ -669,18 +683,33 @@ with mode_tab_switzerland:
                         help="Output resolution (smaller = higher resolution, longer processing). Must be >= reference DEM resolution."
                     )
 
+                    mask_lus = st.checkbox(
+                        "Mask LUS to polygon shape",
+                        value=True,
+                        help="If checked, LUS (land use surface) is cropped to polygon. "
+                             "If unchecked, LUS covers entire bounding box. "
+                             "Note: Grid extent is always the bounding box.",
+                        key="mask_lus_checkbox"
+                    )
+                    st.session_state.config['mask_lus_to_polygon'] = mask_lus
+
                     mask_dem = st.checkbox(
                         "Mask DEM to polygon shape",
-                        value=True,
+                        value=mask_lus,  # Default to same as LUS
+                        disabled=not mask_lus,  # Can only enable if LUS is masked
                         help="If checked, DEM is cropped to polygon (values outside = nodata). "
-                             "If unchecked, DEM covers entire bounding box with all valid values.",
+                             "If unchecked, DEM covers entire bounding box with all valid values. "
+                             "Note: Grid extent is always the bounding box. "
+                             "Cannot be checked if LUS masking is disabled.",
                         key="mask_dem_checkbox"
                     )
-                    st.session_state.config['mask_dem_to_polygon'] = mask_dem
+                    # DEM can only be masked if LUS is also masked
+                    st.session_state.config['mask_dem_to_polygon'] = mask_dem if mask_lus else False
         else:
             # Bounding box mode - need center point coordinates
-            # Always mask DEM for bbox mode
+            # Always mask DEM and LUS for bbox mode
             st.session_state.config['mask_dem_to_polygon'] = True
+            st.session_state.config['mask_lus_to_polygon'] = True
             st.markdown("### ROI Center Point")
     
             # Option to pick point on map or enter manually
@@ -874,8 +903,12 @@ with mode_tab_switzerland:
     # Tab 4: Meteo Settings
     # ============================================================
     with tab4:
-        st.header("Meteorological Settings")
-
+        st.header("Meteo files retrieval with Snowpack")
+        
+        skip_snowpack = st.checkbox("Skip Snowpack preprocessing", 
+                                    value=False,
+                                    help="Disable Snowpack preprocessing step. Meteo files will not be downloaded and preprocessed (RSWR --> ISWR).")
+        
         buffer_size = st.number_input(
             "Buffer Size for IMIS Stations (meters)",
             value=int(st.session_state.config.get('buffer_size', 10000)),
@@ -885,11 +918,10 @@ with mode_tab_switzerland:
             help="Distance to search for meteorological stations around the ROI"
         )
 
-        skip_snowpack = st.checkbox("Skip Snowpack preprocessing", value=False)
-
         # VPN warning if Snowpack preprocessing is enabled
         if not skip_snowpack:
             st.warning("⚠️ **SLF/WSL VPN Required**: Snowpack preprocessing requires VPN access to the IMIS database via MeteoIO.")
+            st.warning("⚠️ **The IMIS database is not sanitized and may contain missing or inconsistent data. This can lead to Snowpack crashes. Advanced user may modify the snowpack config file (.ini) and rebuild the docker image.**")
 
         st.divider()
         st.info("Continue to the next tab: **5. Run ▶️**")
@@ -925,10 +957,12 @@ with mode_tab_switzerland:
             else:
                 st.metric("Land Use", f"Constant ({lus_constant})")
 
-            # DEM masking option (only show if using shapefile)
+            # DEM and LUS masking options (only show if using shapefile)
             if use_shapefile:
-                mask_status = st.session_state.config.get('mask_dem_to_polygon', True)
-                st.metric("DEM Masking", "Polygon" if mask_status else "Full BBox")
+                mask_dem_status = st.session_state.config.get('mask_dem_to_polygon', True)
+                mask_lus_status = st.session_state.config.get('mask_lus_to_polygon', True)
+                st.metric("DEM Masking", "Polygon" if mask_dem_status else "Full BBox")
+                st.metric("LUS Masking", "Polygon" if mask_lus_status else "Full BBox")
     
         st.divider()
     
@@ -980,6 +1014,7 @@ USE_SHP_ROI = {'true' if use_shapefile else 'false'}
                 config_content += f"DEM_ADDFMTLIST =\n"
                 config_content += f"MESH_FMT = vtu\n"
                 config_content += f"MASK_DEM_TO_POLYGON = {'true' if st.session_state.config.get('mask_dem_to_polygon', True) else 'false'}\n"
+                config_content += f"MASK_LUS_TO_POLYGON = {'true' if st.session_state.config.get('mask_lus_to_polygon', True) else 'false'}\n"
                 config_content += f"\n[MAPS]\n"
                 config_content += f"PLOT_HORIZON = false\n"
                 config_content += f"\n[A3D]\n"
@@ -1056,6 +1091,7 @@ USE_SHP_ROI = {'true' if use_shapefile else 'false'}
                 config_content += f"DEM_ADDFMTLIST =\n"
                 config_content += f"MESH_FMT = vtu\n"
                 config_content += f"MASK_DEM_TO_POLYGON = {'true' if st.session_state.config.get('mask_dem_to_polygon', True) else 'false'}\n"
+                config_content += f"MASK_LUS_TO_POLYGON = {'true' if st.session_state.config.get('mask_lus_to_polygon', True) else 'false'}\n"
                 config_content += f"\n[MAPS]\n"
                 config_content += f"PLOT_HORIZON = false\n"
                 config_content += f"\n[A3D]\n"

@@ -51,6 +51,7 @@ class SimulationConfig:
     dem_add_fmt_list: List[str] = field(default_factory=lambda: [""])
     mesh_fmt: str = "vtu"
     mask_dem_to_polygon: bool = True  # Mask DEM to polygon shape (vs full bbox)
+    mask_lus_to_polygon: bool = True  # Mask LUS to polygon shape (vs full bbox)
 
     # Maps
     plot_horizon: bool = True
@@ -281,6 +282,10 @@ class ConfigManager:
             # DEM masking option (optional, defaults to True)
             if "MASK_DEM_TO_POLYGON" in section:
                 config_dict["mask_dem_to_polygon"] = config.getboolean("OUTPUT", "MASK_DEM_TO_POLYGON")
+
+            # LUS masking option (optional, defaults to True)
+            if "MASK_LUS_TO_POLYGON" in section:
+                config_dict["mask_lus_to_polygon"] = config.getboolean("OUTPUT", "MASK_LUS_TO_POLYGON")
 
         # MAPS section
         if "MAPS" in config:

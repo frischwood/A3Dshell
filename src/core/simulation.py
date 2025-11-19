@@ -371,7 +371,8 @@ class SimulationOrchestrator:
             target_crs=target_crs,
             use_tlm=use_tlm,
             tlm_shp_path=tlm_shp,
-            lus_constant=self.config.lus_prevah_cst if not use_tlm else None
+            lus_constant=self.config.lus_prevah_cst if not use_tlm else None,
+            mask_to_polygon=self.config.mask_lus_to_polygon
         )
 
         return lus_file

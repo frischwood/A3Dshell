@@ -106,13 +106,12 @@ class DEMProcessor:
         else:
             logger.info(f"4. No downsampling needed (GSD {gsd}m <= ref {gsd_ref}m)")
 
-        # 5. Crop to ROI (optional for polygon ROIs)
-        if mask_to_polygon or not roi.shapefile_path:
-            # Always mask for bbox mode, optional for polygon mode
-            logger.info("5. Cropping to ROI")
-            self._crop_to_roi(merged_file, merged_file, roi, target_crs)
+        # 5. Crop to ROI bbox (always) and optionally mask to polygon
+        if mask_to_polygon:
+            logger.info("5. Cropping to ROI bbox and masking to polygon")
         else:
-            logger.info("5. Skipping ROI crop (using full bounding box)")
+            logger.info("5. Cropping to ROI bbox (no polygon masking)")
+        self._crop_to_roi(merged_file, merged_file, roi, target_crs, mask_to_polygon=mask_to_polygon)
 
         logger.info(f"DEM processing complete: {output_file}")
         return output_file
@@ -305,6 +304,7 @@ class DEMProcessor:
         dst_file: Path,
         roi,
         target_crs: str,
+        mask_to_polygon: bool = True,
         nodata: float = -9999
     ) -> None:
         """
@@ -315,21 +315,38 @@ class DEMProcessor:
             dst_file: Destination file path
             roi: ROI object with geometry
             target_crs: Target CRS
+            mask_to_polygon: If True, mask to polygon shape; if False, only crop to bbox
             nodata: No data value
         """
         # Get ROI geometry in target CRS
         roi_geom = roi.geometry_2056.to_crs(target_crs)
 
         with rasterio.open(src_file) as src:
-            # Mask/crop
-            out_image, out_transform = rasterio_mask(
-                dataset=src,
-                shapes=roi_geom.geometry,
-                nodata=nodata,
-                all_touched=True,
-                filled=False,
-                crop=True
-            )
+            if mask_to_polygon:
+                # Mask/crop to polygon shape
+                out_image, out_transform = rasterio_mask(
+                    dataset=src,
+                    shapes=roi_geom.geometry,
+                    nodata=nodata,
+                    all_touched=True,
+                    filled=False,
+                    crop=True
+                )
+            else:
+                # Only crop to bounding box (no polygon masking)
+                # Use bounding box as the shape
+                from shapely.geometry import box
+                bounds = roi_geom.total_bounds  # minx, miny, maxx, maxy
+                bbox_geom = box(*bounds)
+
+                out_image, out_transform = rasterio_mask(
+                    dataset=src,
+                    shapes=[bbox_geom],
+                    nodata=nodata,
+                    all_touched=True,
+                    filled=False,
+                    crop=True
+                )
 
             # Round transform coordinates to cm precision
             out_transform = rasterio.Affine(

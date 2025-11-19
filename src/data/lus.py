@@ -67,7 +67,8 @@ class LUSProcessor:
         target_crs: str,
         use_tlm: bool = True,
         tlm_shp_path: Optional[Path] = None,
-        lus_constant: Optional[int] = None
+        lus_constant: Optional[int] = None,
+        mask_to_polygon: bool = True
     ) -> Path:
         """
         Create land use grid.
@@ -79,6 +80,7 @@ class LUSProcessor:
             use_tlm: Whether to use SwissTLMRegio data
             tlm_shp_path: Path to TLM landcover shapefile
             lus_constant: Constant LUS value (if not using TLM)
+            mask_to_polygon: Whether to mask LUS to polygon (vs full bbox)
 
         Returns:
             Path to LUS file
@@ -102,12 +104,12 @@ class LUSProcessor:
                     f"TLM shapefile required but not found: {tlm_shp_path}"
                 )
             logger.info("Creating LUS from SwissTLMRegio")
-            self._create_from_tlm(dem_file, tlm_shp_path, roi, target_crs, lus_file)
+            self._create_from_tlm(dem_file, tlm_shp_path, roi, target_crs, lus_file, mask_to_polygon)
         else:
             if lus_constant is None:
                 raise ValueError("lus_constant required when not using TLM")
             logger.info(f"Creating LUS from constant value: {lus_constant}")
-            self._create_from_constant(dem_file, roi, target_crs, lus_constant, lus_file)
+            self._create_from_constant(dem_file, roi, target_crs, lus_constant, lus_file, mask_to_polygon)
 
         logger.info(f"LUS created: {lus_file}")
         return lus_file
@@ -119,6 +121,7 @@ class LUSProcessor:
         roi,
         target_crs: str,
         output_file: Path,
+        mask_to_polygon: bool = True,
         nodata: int = -9999
     ) -> None:
         """
@@ -130,6 +133,7 @@ class LUSProcessor:
             roi: ROI object
             target_crs: Target CRS
             output_file: Output LUS file path
+            mask_to_polygon: Whether to mask LUS to polygon
             nodata: No data value
         """
         # Read DEM metadata
@@ -197,28 +201,55 @@ class LUSProcessor:
             # Write to temporary file
             dst.write(lus_grid, 1)
 
-        # Mask to ROI
+        # Crop to ROI bbox (always) and optionally mask to polygon
         roi_geom = roi.geometry_2056.to_crs(target_crs)
 
         with rasterio.open(temp_file) as src:
-            masked, out_transform = rasterio_mask(
-                dataset=src,
-                shapes=roi_geom.geometry,
-                nodata=nodata,
-                filled=True,
-                all_touched=True
-            )
+            if mask_to_polygon:
+                logger.info("   Cropping to ROI bbox and masking to polygon")
+                # Mask/crop to polygon shape
+                masked, out_transform = rasterio_mask(
+                    dataset=src,
+                    shapes=roi_geom.geometry,
+                    nodata=nodata,
+                    filled=True,
+                    all_touched=True,
+                    crop=True
+                )
+            else:
+                logger.info("   Cropping to ROI bbox (no polygon masking)")
+                # Only crop to bounding box (no polygon masking)
+                from shapely.geometry import box
+                bounds = roi_geom.total_bounds  # minx, miny, maxx, maxy
+                bbox_geom = box(*bounds)
+
+                masked, out_transform = rasterio_mask(
+                    dataset=src,
+                    shapes=[bbox_geom],
+                    nodata=nodata,
+                    filled=True,
+                    all_touched=True,
+                    crop=True
+                )
+
+            # Update metadata with new transform
+            meta.update({
+                "height": masked.shape[1],
+                "width": masked.shape[2],
+                "transform": out_transform
+            })
 
             # Write final LUS file
             with rasterio.open(output_file, "w", **meta) as dst:
                 dst.write(masked[0], 1)
 
-        # Remove temporary file
-        temp_file.unlink()
+            # Log statistics
+            unique_values = np.unique(masked[masked != nodata])
+            logger.info(f"   LUS grid created: {len(unique_values)} unique land use types")
 
-        # Log statistics
-        unique_values = np.unique(masked[masked != nodata])
-        logger.info(f"   LUS grid created: {len(unique_values)} unique land use types")
+        # Remove temporary file if it still exists
+        if temp_file.exists():
+            temp_file.unlink()
 
     def _create_from_constant(
         self,
@@ -227,6 +258,7 @@ class LUSProcessor:
         target_crs: str,
         lus_value: int,
         output_file: Path,
+        mask_to_polygon: bool = True,
         nodata: int = -9999
     ) -> None:
         """
@@ -238,6 +270,7 @@ class LUSProcessor:
             target_crs: Target CRS
             lus_value: Constant LUS value
             output_file: Output file path
+            mask_to_polygon: Whether to mask LUS to polygon
             nodata: No data value
         """
         # Read DEM metadata
@@ -252,14 +285,61 @@ class LUSProcessor:
             nodata
         )
 
-        # Write LUS file
+        # Write to temporary file first
+        temp_file = output_file.with_suffix('.tmp.lus')
         meta_copy = meta.copy()
         meta_copy["dtype"] = "int32"
 
-        with rasterio.open(output_file, "w", **meta_copy) as dst:
+        with rasterio.open(temp_file, "w", **meta_copy) as dst:
             dst.write(lus_grid.astype(np.int32), 1)
 
+        # Crop to ROI bbox (always) and optionally mask to polygon
+        roi_geom = roi.geometry_2056.to_crs(target_crs)
+
+        with rasterio.open(temp_file) as src:
+            if mask_to_polygon:
+                logger.info("   Cropping to ROI bbox and masking to polygon")
+                # Mask/crop to polygon shape
+                masked, out_transform = rasterio_mask(
+                    dataset=src,
+                    shapes=roi_geom.geometry,
+                    nodata=nodata,
+                    filled=True,
+                    all_touched=True,
+                    crop=True
+                )
+            else:
+                logger.info("   Cropping to ROI bbox (no polygon masking)")
+                # Only crop to bounding box (no polygon masking)
+                from shapely.geometry import box
+                bounds = roi_geom.total_bounds  # minx, miny, maxx, maxy
+                bbox_geom = box(*bounds)
+
+                masked, out_transform = rasterio_mask(
+                    dataset=src,
+                    shapes=[bbox_geom],
+                    nodata=nodata,
+                    filled=True,
+                    all_touched=True,
+                    crop=True
+                )
+
+            # Update metadata with new transform
+            meta_copy.update({
+                "height": masked.shape[1],
+                "width": masked.shape[2],
+                "transform": out_transform
+            })
+
+            # Write final LUS file
+            with rasterio.open(output_file, "w", **meta_copy) as dst:
+                dst.write(masked[0], 1)
+
         logger.info(f"   LUS grid created with constant value: {lus_value}")
+
+        # Remove temporary file if it still exists
+        if temp_file.exists():
+            temp_file.unlink()
 
     def _tlm_to_a3d_code(self, tlm_category: str) -> int:
         """
