@@ -291,7 +291,7 @@ def create_roi_map(center_lat=46.8, center_lon=8.2, zoom=8):
         attr='© swisstopo'
     ).add_to(m)
 
-    # Add drawing tools (rectangle only)
+    # Add drawing tools (rectangle and polygon)
     draw = Draw(
         export=False,
         draw_options={
@@ -300,7 +300,7 @@ def create_roi_map(center_lat=46.8, center_lon=8.2, zoom=8):
             'circle': False,
             'marker': False,
             'circlemarker': False,
-            'polygon': False
+            'polygon': True
         },
         edit_options={
             'edit': True,
@@ -548,7 +548,7 @@ with mode_tab_switzerland:
             else:
                 # Interactive map for drawing ROI
                 st.markdown("### 🗺️ Draw ROI on Swiss Map")
-                st.info("**Instructions**: Use the rectangle tool (□) on the left side of the map to draw your ROI. Click the save button when done.")
+                st.info("**Instructions**: Use the rectangle (□) or polygon (⬠) tool on the left side of the map to draw your ROI. Click the save button when done.")
     
                 # Initialize roi_shapefile from session state
                 roi_shapefile = st.session_state.config.get('roi_shapefile', '')
