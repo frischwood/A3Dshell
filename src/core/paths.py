@@ -39,10 +39,10 @@ class PathManager:
         self.input_brdf = self.input_dir / "brdf-files"
         self.input_templates = self.input_dir / "templates"
         self.input_imis = self.input_dir / "imis"
-        self.input_tlm = self.input_dir / "tlm"
 
         # Cache subdirectories
         self.cache_dem = self.cache_dir / "dem_tiles"
+        self.cache_tlm = self.cache_dir / "tlm"
         self.cache_maps = self.cache_dir / "maps"
         self.cache_metadata = self.cache_dir / "metadata.json"
 
@@ -145,10 +145,10 @@ class PathManager:
             self.input_brdf,
             self.input_templates,
             self.input_imis,
-            self.input_tlm,
             self.output_dir,
             self.cache_dir,
             self.cache_dem,
+            self.cache_tlm,
             self.cache_maps,
         ]
 

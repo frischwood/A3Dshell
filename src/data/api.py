@@ -101,10 +101,16 @@ class SwisstopoAPI:
 
         logger.info(f"Found {len(links)} TLM data files")
 
-        # Download files (TLM is shared, not cached per-bbox)
+        # Download files (TLM is cached, shared across all simulations)
         tlm_paths = []
+        tlm_cache_dir = self.cache.cache_dir / "tlm"
         for link in links:
-            file_path = self._download_file(link, self.cache.cache_dir.parent / "input" / "tlm")
+            file_path = self._download_file(link, tlm_cache_dir)
+
+            # Extract if zip
+            if file_path.suffix == ".zip":
+                file_path = self._extract_zip(file_path)
+
             tlm_paths.append(file_path)
 
         return tlm_paths

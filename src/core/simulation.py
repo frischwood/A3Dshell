@@ -79,8 +79,8 @@ class SimulationOrchestrator:
                 # Other Locations mode - simplified workflow
                 self._run_other_locations_mode()
 
-            # Phase 8: Output Packaging
-            log_section(logger, "Phase 8: Output Packaging", self.start_time)
+            # Phase 6: Output Packaging
+            log_section(logger, "Phase 6: Output Packaging", self.start_time)
             self._package_output()
 
             # Done
@@ -106,29 +106,23 @@ class SimulationOrchestrator:
 
     def _run_switzerland_mode(self) -> None:
         """Run full workflow for Switzerland mode."""
-        # Phase 2: ROI & Data Download
-        log_section(logger, "Phase 2: ROI & Data", self.start_time)
+        # Phase 2: ROI & DEM Processing
+        log_section(logger, "Phase 2: ROI & DEM Processing", self.start_time)
         roi = self._create_roi()
         target_crs = self._get_target_crs()
-
-        # Phase 3: DEM Processing
-        log_section(logger, "Phase 3: DEM Processing", self.start_time)
         dem_file = self._process_dem(roi, target_crs)
 
-        # Phase 4: LUS Processing
-        log_section(logger, "Phase 4: LUS Processing", self.start_time)
+        # Phase 3: Land Use Surface (LUS) Processing
+        log_section(logger, "Phase 3: Land Use Surface (LUS) Processing", self.start_time)
         lus_file = self._process_lus(roi, dem_file, target_crs)
 
-        # Phase 5: IMIS Station Selection
-        log_section(logger, "Phase 5: IMIS Station Selection", self.start_time)
+        # Phase 4: Meteorological Data
+        log_section(logger, "Phase 4: Meteorological Data", self.start_time)
         imis_stations = self._select_imis_stations(roi)
-
-        # Phase 6: Snowpack Preprocessing
-        log_section(logger, "Phase 6: Snowpack Preprocessing", self.start_time)
         self._run_snowpack(imis_stations)
 
-        # Phase 7: A3D Configuration
-        log_section(logger, "Phase 7: A3D Configuration", self.start_time)
+        # Phase 5: A3D Configuration
+        log_section(logger, "Phase 5: A3D Configuration", self.start_time)
         self._configure_a3d(imis_stations, lus_file)
 
     def _run_other_locations_mode(self) -> None:
@@ -345,9 +339,22 @@ class SimulationOrchestrator:
             # Find landcover shapefile
             for tlm_file in tlm_files:
                 if tlm_file.is_dir():
+                    # Try direct path first
                     landcover_shp = tlm_file / "Landcover" / "swissTLMRegio_LandCover.shp"
                     if landcover_shp.exists():
                         tlm_shp = landcover_shp
+                        break
+
+                    # Try nested structure (swissTLMRegio_Product_LV95/Landcover/)
+                    product_dirs = list(tlm_file.glob("swissTLMRegio_Product_*/"))
+                    for product_dir in product_dirs:
+                        landcover_shp = product_dir / "Landcover" / "swissTLMRegio_LandCover.shp"
+                        if landcover_shp.exists():
+                            tlm_shp = landcover_shp
+                            logger.info(f"Found TLM landcover shapefile: {landcover_shp}")
+                            break
+
+                    if tlm_shp:
                         break
 
             if not tlm_shp:

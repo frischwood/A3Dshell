@@ -146,16 +146,31 @@ class LUSProcessor:
 
         # Convert TLM categories to PREVAH codes
         logger.info("   Converting TLM categories to PREVAH codes")
+
+        # Get unique TLM categories before conversion
+        unique_tlm_categories = tlm_data["OBJVAL"].unique()
+        logger.info(f"   Found {len(unique_tlm_categories)} unique TLM categories")
+
         tlm_data["prevah_lus"] = tlm_data.apply(
             lambda row: self._tlm_to_a3d_code(row.get("OBJVAL", "")),
             axis=1
         )
 
+        # Identify unmapped categories
+        unmapped_mask = tlm_data["prevah_lus"] == 0
+        if unmapped_mask.any():
+            unmapped_categories = tlm_data[unmapped_mask]["OBJVAL"].unique()
+            unmapped_count = unmapped_mask.sum()
+            logger.warning(
+                f"   Found {unmapped_count} features with unmapped TLM categories: {', '.join(unmapped_categories)}"
+            )
+            logger.warning("   These areas will be set to nodata in the LUS grid")
+
         # Filter out unmapped categories
         tlm_data = tlm_data[tlm_data["prevah_lus"] > 0]
 
-        logger.info(f"   Found {len(tlm_data)} TLM features")
-        logger.info(f"   Unique categories: {tlm_data['prevah_lus'].unique()}")
+        logger.info(f"   Mapped {len(tlm_data)} TLM features to PREVAH codes")
+        logger.info(f"   Unique PREVAH codes: {sorted(tlm_data['prevah_lus'].unique())}")
 
         # Create temporary raster for burning
         temp_file = output_file.with_suffix('.tmp.lus')

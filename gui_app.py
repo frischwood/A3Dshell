@@ -350,7 +350,7 @@ st.title("A3Dshell")
 st.markdown("Configure Alpine3D simulation setups")
 
 # Sidebar for existing configs
-st.sidebar.header("📁 Load Existing Config")
+st.sidebar.header("Load Existing Config")
 config_dir = Path("config")
 existing_configs = list(config_dir.glob("*.ini"))
 config_names = ["Create New"] + [c.name for c in existing_configs]
@@ -479,7 +479,11 @@ with mode_tab_switzerland:
     # ============================================================
     with tab2:
         st.header("Region of Interest (ROI)")
-    
+
+        # Initialize DEM settings variables (will be set by widgets below)
+        gsd = float(st.session_state.config.get('gsd', 10.0))
+        gsd_ref = float(st.session_state.config.get('gsd_ref', 2.0))
+
         use_shapefile = st.checkbox(
             "Use custom shapefile for ROI",
             value=st.session_state.config.get('use_shp', True)
@@ -489,144 +493,190 @@ with mode_tab_switzerland:
             # Option to provide existing shapefile or draw new one
             shapefile_option = st.radio(
                 "How to define ROI:",
-                ["📁 Use existing shapefile", "🗺️ Draw on interactive map"],
+                ["Draw on interactive map", "Use existing shapefile"],
                 horizontal=True
             )
     
-            if shapefile_option == "📁 Use existing shapefile":
-                st.markdown("### 📁 Select Existing Shapefile")
-    
-                # Shapefile browser
-                col1, col2 = st.columns([1, 2])
-    
-                with col1:
-                    search_dir = st.text_input(
-                        "Search directory:",
-                        value="config/",
-                        help="Directory to search for shapefiles (must be in a mounted volume)"
-                    )
-    
-                with col2:
-                    # Find shapefiles in directory
-                    found_shapefiles = find_shapefiles(search_dir)
-    
-                    if found_shapefiles:
-                        # Create dropdown options
-                        shapefile_options = ["[Type path manually]"] + [str(shp) for shp in found_shapefiles]
-    
-                        selected_shapefile = st.selectbox(
-                            "Available shapefiles:",
-                            options=shapefile_options,
-                            help="Select from found shapefiles or choose to type manually"
+            if shapefile_option == "Use existing shapefile":
+                st.markdown("### Select Existing Shapefile")
+
+                # Create two columns: shapefile selection on left, DEM settings on right
+                shapefile_col, settings_col = st.columns([2, 1])
+
+                with shapefile_col:
+                    # Shapefile browser
+                    col1, col2 = st.columns([1, 2])
+
+                    with col1:
+                        search_dir = st.text_input(
+                            "Search directory:",
+                            value="config/",
+                            help="Directory to search for shapefiles (must be in a mounted volume)"
                         )
-    
-                        # Auto-populate if user selected a file
-                        if selected_shapefile != "[Type path manually]":
-                            default_path = selected_shapefile
+
+                    with col2:
+                        # Find shapefiles in directory
+                        found_shapefiles = find_shapefiles(search_dir)
+
+                        if found_shapefiles:
+                            # Create dropdown options
+                            shapefile_options = ["[Type path manually]"] + [str(shp) for shp in found_shapefiles]
+
+                            selected_shapefile = st.selectbox(
+                                "Available shapefiles:",
+                                options=shapefile_options,
+                                help="Select from found shapefiles or choose to type manually"
+                            )
+
+                            # Auto-populate if user selected a file
+                            if selected_shapefile != "[Type path manually]":
+                                roi_shapefile = selected_shapefile
+                                st.session_state['roi_validated'] = True
+                                st.success(f"✓ Selected: `{roi_shapefile}`")
+                            else:
+                                # Manual path input only if user chooses to type manually
+                                roi_shapefile = st.text_input(
+                                    "Shapefile path:",
+                                    value=st.session_state.config.get('roi_shapefile', ''),
+                                    help="Path to .shp file (must be in a mounted volume: config/, shapefiles/, etc.)"
+                                )
+                                st.session_state['roi_validated'] = bool(roi_shapefile)
                         else:
-                            default_path = st.session_state.config.get('roi_shapefile', '')
-                    else:
-                        st.info(f"ℹ️ No shapefiles found in `{search_dir}`. Enter path manually below.")
-                        default_path = st.session_state.config.get('roi_shapefile', '')
-    
-                # Manual path input (always available as fallback)
-                roi_shapefile = st.text_input(
-                    "Shapefile path:",
-                    value=default_path,
-                    help="Path to .shp file (must be in a mounted volume: config/, shapefiles/, etc.)"
-                )
-    
-                # Mark as validated if user provided a shapefile path (we trust existing shapefiles)
-                if roi_shapefile:
-                    st.session_state['roi_validated'] = True
-                    st.info(f"📍 Using shapefile: `{roi_shapefile}`")
-                else:
-                    st.session_state['roi_validated'] = False
-    
-                # Info message about Docker volumes
-                st.caption("💡 **Docker users**: Shapefiles must be in mounted volumes (e.g., `config/`, `shapefiles/`). See README for details.")
+                            st.info(f"ℹ️ No shapefiles found in `{search_dir}`. Enter path manually below.")
+                            roi_shapefile = st.text_input(
+                                "Shapefile path:",
+                                value=st.session_state.config.get('roi_shapefile', ''),
+                                help="Path to .shp file (must be in a mounted volume: config/, shapefiles/, etc.)"
+                            )
+                            st.session_state['roi_validated'] = bool(roi_shapefile)
+
+                    # Info message about Docker volumes
+                    st.caption("**Docker users**: Shapefiles must be in mounted volumes (e.g., `config/`, `shapefiles/`). See README for details.")
+
+                with settings_col:
+                    # DEM Settings
+                    # st.markdown("#### DEM Settings")
+
+                    gsd_ref = st.selectbox(
+                        "Reference DEM Resolution",
+                        [0.5, 2.0],
+                        index=[0.5, 2.0].index(float(st.session_state.config.get('gsd_ref', 2.0))),
+                        help="Source DEM resolution from Swisstopo"
+                    )
+
+                    gsd = st.number_input(
+                        "Output Grid Spacing - meters",
+                        value=max(float(st.session_state.config.get('gsd', 10.0)), gsd_ref),
+                        min_value=gsd_ref,
+                        max_value=100.0,
+                        step=1.0,
+                        help="Output resolution (smaller = higher resolution, longer processing). Must be >= reference DEM resolution."
+                    )
+
+                    mask_dem = st.checkbox(
+                        "Mask DEM to polygon shape",
+                        value=True,
+                        help="If checked, DEM is cropped to polygon (values outside = nodata). "
+                             "If unchecked, DEM covers entire bounding box with all valid values.",
+                        key="mask_dem_checkbox_existing_shp"
+                    )
+                    st.session_state.config['mask_dem_to_polygon'] = mask_dem
             else:
                 # Interactive map for drawing ROI
-                st.markdown("### 🗺️ Draw ROI on Swiss Map")
-                st.info("**Instructions**: Use the rectangle (□) or polygon (⬠) tool on the left side of the map to draw your ROI. Click the save button when done.")
-    
+                st.markdown("### Draw ROI on Swiss Map")
+                st.info("**Instructions**: Use the rectangle (□) or polygon (⬠) tool on the left side of the map to draw your ROI.")
+
                 # Initialize roi_shapefile from session state
                 roi_shapefile = st.session_state.config.get('roi_shapefile', '')
-    
-                # Show map
-                roi_map = create_roi_map()
-                map_output = st_folium(roi_map, width=800, height=600, key="roi_map")
-    
-                # Handle drawn polygon
-                if map_output and map_output.get('last_active_drawing'):
-                    drawn_geom = map_output['last_active_drawing']
-    
-                    # Debug: Show what was captured
-                    with st.expander("🔍 Debug: View captured geometry", expanded=False):
-                        st.json(drawn_geom)
-    
-                    # Validate polygon is within Swiss boundaries
-                    is_valid, boundary_msg = check_polygon_in_swiss_boundaries(drawn_geom['geometry'])
-    
-                    if is_valid:
-                        st.success("✅ Polygon drawn! Click button below to save as shapefile.")
-                        st.info(boundary_msg)
-    
-                        # Input for shapefile name
-                        col1, col2 = st.columns([3, 1])
-                        with col1:
+
+                # Create two columns: map on left, controls on right
+                map_col, controls_col = st.columns([2, 1])
+
+                with map_col:
+                    # Show map
+                    roi_map = create_roi_map()
+                    map_output = st_folium(roi_map, width=600, height=500, key="roi_map")
+
+                with controls_col:
+                    st.markdown("#### Save ROI")
+
+                    # Handle drawn polygon
+                    if map_output and map_output.get('last_active_drawing'):
+                        drawn_geom = map_output['last_active_drawing']
+
+                        # Debug: Show what was captured
+                        with st.expander("🔍 Debug", expanded=False):
+                            st.json(drawn_geom)
+
+                        # Validate polygon is within Swiss boundaries
+                        is_valid, boundary_msg = check_polygon_in_swiss_boundaries(drawn_geom['geometry'])
+
+                        if is_valid:
+                            st.success("✅ Polygon drawn!")
+                            st.caption(boundary_msg)
+
+                            # Input for shapefile name
                             shapefile_name = st.text_input(
                                 "Shapefile name",
                                 value="roi_drawn",
                                 help="Name for the shapefile (without .shp extension)"
                             )
-                        with col2:
-                            st.markdown("<br>", unsafe_allow_html=True)
-                            save_button = st.button("💾 Save ROI", type="primary")
-    
-                        if save_button and shapefile_name:
-                            # Save shapefile
-                            shapefile_dir = Path("config/shapefiles")
-                            shapefile_path = shapefile_dir / f"{shapefile_name}.shp"
-    
-                            success, message = save_drawn_roi(drawn_geom, str(shapefile_path))
-                            if success:
-                                st.success(message)
-                                roi_shapefile = str(shapefile_path)
-                                st.session_state.config['roi_shapefile'] = str(shapefile_path)
-                                st.info(f"📍 Shapefile path set to: `{roi_shapefile}`")
-                                # Mark ROI as validated (polygon was already validated above)
-                                st.session_state['roi_validated'] = True
-                            else:
-                                st.error(message)
-                                st.session_state['roi_validated'] = False
+
+                            save_button = st.button("Save ROI", type="primary", use_container_width=True)
+
+                            if save_button and shapefile_name:
+                                # Save shapefile
+                                shapefile_dir = Path("config/shapefiles")
+                                shapefile_path = shapefile_dir / f"{shapefile_name}.shp"
+
+                                success, message = save_drawn_roi(drawn_geom, str(shapefile_path))
+                                if success:
+                                    st.success(message)
+                                    roi_shapefile = str(shapefile_path)
+                                    st.session_state.config['roi_shapefile'] = str(shapefile_path)
+                                    # Mark ROI as validated (polygon was already validated above)
+                                    st.session_state['roi_validated'] = True
+                                else:
+                                    st.error(message)
+                                    st.session_state['roi_validated'] = False
+                        else:
+                            # Polygon outside boundaries - show error and prevent saving
+                            st.error("🚫 Outside boundaries")
+                            st.caption(boundary_msg)
+                            st.session_state['roi_validated'] = False
                     else:
-                        # Polygon outside boundaries - show error and prevent saving
-                        st.error(boundary_msg)
-                        st.warning("🚫 Cannot save ROI outside Swiss boundaries. Please redraw within Switzerland.")
-                        st.session_state['roi_validated'] = False
-                else:
-                    # Show warning if no polygon drawn yet
-                    if not roi_shapefile:
-                        st.warning("⚠️ No polygon drawn yet. Use the drawing tools on the map.")
+                        # Show warning if no polygon drawn yet
+                        if not roi_shapefile:
+                            st.warning("⚠️ No polygon drawn yet")
 
-            # DEM Masking option (only for shapefile/polygon mode)
-            st.divider()
-            st.subheader("🗺️ DEM Masking Options")
+                    # DEM Settings (always visible)
+                    st.divider()
+                    st.markdown("#### DEM Settings")
 
-            mask_dem = st.checkbox(
-                "Mask DEM to polygon shape",
-                value=True,
-                help="If checked, DEM is cropped to polygon (values outside = nodata). "
-                     "If unchecked, DEM covers entire bounding box with all valid values.",
-                key="mask_dem_checkbox"
-            )
-            st.session_state.config['mask_dem_to_polygon'] = mask_dem
+                    gsd_ref = st.selectbox(
+                        "Reference DEM Resolution",
+                        [0.5, 2.0],
+                        index=[0.5, 2.0].index(float(st.session_state.config.get('gsd_ref', 2.0))),
+                        help="Source DEM resolution from Swisstopo"
+                    )
 
-            if not mask_dem:
-                st.info("DEM will cover the full bounding box with all valid values. LUS will still be masked to the polygon.")
-            else:
-                st.info("DEM will be cropped to the polygon shape. Values outside the polygon will be set to nodata.")
+                    gsd = st.number_input(
+                        "Output Grid Spacing - meters",
+                        value=max(float(st.session_state.config.get('gsd', 10.0)), gsd_ref),
+                        min_value=gsd_ref,
+                        max_value=100.0,
+                        step=1.0,
+                        help="Output resolution (smaller = higher resolution, longer processing). Must be >= reference DEM resolution."
+                    )
+
+                    mask_dem = st.checkbox(
+                        "Mask DEM to polygon shape",
+                        value=True,
+                        help="If checked, DEM is cropped to polygon (values outside = nodata). "
+                             "If unchecked, DEM covers entire bounding box with all valid values.",
+                        key="mask_dem_checkbox"
+                    )
+                    st.session_state.config['mask_dem_to_polygon'] = mask_dem
         else:
             # Bounding box mode - need center point coordinates
             # Always mask DEM for bbox mode
@@ -636,11 +686,11 @@ with mode_tab_switzerland:
             # Option to pick point on map or enter manually
             center_point_option = st.radio(
                 "How to define center point:",
-                ["⌨️ Enter coordinates manually", "🗺️ Pick on map"],
+                ["⌨️ Enter coordinates manually", "Pick on map"],
                 horizontal=True
             )
     
-            if center_point_option == "🗺️ Pick on map":
+            if center_point_option == "Pick on map":
                 st.info("**Instructions**: Click anywhere on the map to select the ROI center point.")
     
                 # Create map for point selection
@@ -771,29 +821,28 @@ with mode_tab_switzerland:
             poi_x = float(st.session_state.config.get('poi_x', 645000))
             poi_y = float(st.session_state.config.get('poi_y', 115000))
             poi_z = float(st.session_state.config.get('poi_z', 1500))
+        else:
+            # DEM settings for bbox mode (shapefile mode has them in right column)
+            st.divider()
+            col1, col2 = st.columns(2)
 
-        st.divider()
+            with col1:
+                gsd_ref = st.selectbox(
+                    "Reference DEM Resolution",
+                    [0.5, 2.0],
+                    index=[0.5, 2.0].index(float(st.session_state.config.get('gsd_ref', 2.0))),
+                    help="Source DEM resolution from Swisstopo"
+                )
 
-        # Output resolution settings
-        col1, col2 = st.columns(2)
-
-        with col1:
-            gsd_ref = st.selectbox(
-                "Reference DEM Resolution",
-                [0.5, 2.0],
-                index=[0.5, 2.0].index(float(st.session_state.config.get('gsd_ref', 2.0))),
-                help="Source DEM resolution from Swisstopo"
-            )
-
-        with col2:
-            gsd = st.number_input(
-                "Output Grid Spacing - meters",
-                value=float(st.session_state.config.get('gsd', 10.0)),
-                min_value=1.0,
-                max_value=100.0,
-                step=1.0,
-                help="Output resolution (smaller = higher resolution, longer processing)"
-            )
+            with col2:
+                gsd = st.number_input(
+                    "Output Grid Spacing - meters",
+                    value=max(float(st.session_state.config.get('gsd', 10.0)), gsd_ref),
+                    min_value=gsd_ref,
+                    max_value=100.0,
+                    step=1.0,
+                    help="Output resolution (smaller = higher resolution, longer processing). Must be >= reference DEM resolution."
+                )
 
         st.divider()
         st.info("Continue to the next tab: **3. Landcover**")
@@ -803,22 +852,21 @@ with mode_tab_switzerland:
     # ============================================================
     with tab3:
         st.header("Land Use")
-    
-        st.info("ℹ️ SwissTLMRegio integration is a future feature. Currently, only constant land use values are supported.")
-    
+
         use_lus_tlm = st.checkbox(
-            "Use SwissTLMRegio for land use (Coming Soon)",
-            value=False,
-            disabled=True,
-            help="Automatic download of Swiss topographic land use data - not yet implemented"
+            "Use SwissTLMRegio for land use",
+            value=True,
+            help="Automatically download and process Swiss topographic land use data from Swisstopo. "
+                 "Supports 11 TLM categories (Forest, Rock, Scree, Glacier, Lake, Settlement, Wetland, Orchard, Vineyard, etc.)"
         )
-    
+
         lus_constant = st.number_input(
             "Constant Land Use Value",
             value=int(st.session_state.config.get('lus_cst', 11500)),
-            help="Single PREVAH land use code (format: 1LLCD where LL is PREVAH code)"
+            help="Single PREVAH land use code (format: 1LLCD where LL is PREVAH code). Used when TLMregio is disabled.",
+            disabled=use_lus_tlm
         )
-    
+
         st.divider()
         st.info("Continue to the next tab: **4. Meteo**")
 
@@ -858,19 +906,29 @@ with mode_tab_switzerland:
     
         # Summary display
         col1, col2 = st.columns(2)
-    
+
         with col1:
             st.metric("Simulation Name", simu_name)
             st.metric("Period", f"{(end_dt - start_dt).days} days")
-            st.metric("POI", f"{poi_x:.0f}E, {poi_y:.0f}N, {poi_z:.0f}m")
-    
-        with col2:
             st.metric("Coordinate System", coord_sys)
             st.metric("Grid Spacing", f"{gsd}m")
+
+        with col2:
             if use_shapefile:
-                st.metric("ROI", "Custom Shapefile")
+                st.metric("ROI", "Custom Shapefile/Polygon")
             else:
                 st.metric("ROI", f"{roi_size}m bbox")
+
+            # Land use option
+            if use_lus_tlm:
+                st.metric("Land Use", "SwissTLMRegio")
+            else:
+                st.metric("Land Use", f"Constant ({lus_constant})")
+
+            # DEM masking option (only show if using shapefile)
+            if use_shapefile:
+                mask_status = st.session_state.config.get('mask_dem_to_polygon', True)
+                st.metric("DEM Masking", "Polygon" if mask_status else "Full BBox")
     
         st.divider()
     
@@ -881,13 +939,13 @@ with mode_tab_switzerland:
             save_config_name = st.text_input(
                 "Config filename (without .ini)",
                 value=simu_name if simu_name else "my_simulation",
-                help="Name for saving this configuration"
+                help="Name for saving this A3Dshell configuration"
             )
     
         with col2:
             st.write("")  # Spacing
             st.write("")  # Spacing
-            save_button = st.button("💾 Save Config", use_container_width=True)
+            save_button = st.button("Save Config", use_container_width=True)
     
         if save_button:
             if not save_config_name:
