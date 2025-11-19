@@ -74,14 +74,14 @@ cd a3dshell
 # Login to github registry with your github credentials
 docker login ghcr.io 
 # Pull the latest Docker image
-docker pull ghcr.io/frischwood/A3Dshell:latest
+docker pull ghcr.io/frischwood/A3Dshell:v0.2.0
 
 # Start the GUI
 docker run --rm -p 8501:8501 \
   -v $(pwd)/output:/app/a3dshell/output \
   -v $(pwd)/cache:/app/a3dshell/cache \
   -v $(pwd)/config:/app/a3dshell/config \
-  ghcr.io/frischwood/A3Dshell:latest
+  ghcr.io/frischwood/A3Dshell:v0.2.0
 
 # Then open browser to: http://localhost:8501
 # (Note: Use localhost, NOT 0.0.0.0)
@@ -101,7 +101,7 @@ wget -P config/ https://raw.githubusercontent.com/frischwood/A3Dshell/main/confi
 wget https://raw.githubusercontent.com/frischwood/A3Dshell/main/docker/docker-compose.registry.yml
 
 # Pull and run
-docker pull ghcr.io/frischwood/A3Dshell:latest
+docker pull ghcr.io/frischwood/A3Dshell:v0.2.0
 docker-compose -f docker-compose.registry.yml up
 ```
 
@@ -118,7 +118,7 @@ docker run --rm \
   -v $(pwd)/output:/app/a3dshell/output \
   -v $(pwd)/cache:/app/a3dshell/cache \
   -v $(pwd)/config:/app/a3dshell/config \
-  ghcr.io/frischwood/A3Dshell:latest \
+  ghcr.io/frischwood/A3Dshell:v0.2.0 \
   python -m src.cli --config config/example_quick_test.ini
 ```
 
@@ -209,12 +209,12 @@ SKIP_SNOWPACK = true
 
 **With Docker:**
 ```bash
-docker pull ghcr.io/frischwood/A3Dshell:latest
+docker pull ghcr.io/frischwood/A3Dshell:v0.2.0
 docker run --rm -p 8501:8501 \
   -v $(pwd)/output:/app/a3dshell/output \
   -v $(pwd)/cache:/app/a3dshell/cache \
   -v $(pwd)/config:/app/a3dshell/config \
-  ghcr.io/frischwood/A3Dshell:latest
+  ghcr.io/frischwood/A3Dshell:v0.2.0
 ```
 
 **Without Docker:**
@@ -295,7 +295,7 @@ docker run --rm \
   -v $(pwd)/output:/app/a3dshell/output \
   -v $(pwd)/cache:/app/a3dshell/cache \
   -v $(pwd)/config:/app/a3dshell/config \
-  ghcr.io/frischwood/A3Dshell:latest \
+  ghcr.io/frischwood/A3Dshell:v0.2.0 \
   python -m src.cli --config config/my_simulation.ini
 
 # Without Docker
@@ -400,7 +400,7 @@ docker run --rm \
   -v $(pwd)/output:/app/a3dshell/output \
   -v $(pwd)/cache:/app/a3dshell/cache \
   -v $(pwd)/config:/app/a3dshell/config \
-  ghcr.io/frischwood/A3Dshell:latest \
+  ghcr.io/frischwood/A3Dshell:v0.2.0 \
   python -m src.cli --config config/example_quick_test.ini
 
 # With shapefile (mount additional volume)
@@ -409,7 +409,7 @@ docker run --rm \
   -v $(pwd)/cache:/app/a3dshell/cache \
   -v $(pwd)/config:/app/a3dshell/config \
   -v /path/to/shapefiles:/app/shapefiles:ro \
-  ghcr.io/frischwood/A3Dshell:latest \
+  ghcr.io/frischwood/A3Dshell:v0.2.0 \
   python -m src.cli --config config/my_simulation.ini \
     --roi-shapefile /app/shapefiles/roi.shp
 ```
@@ -549,7 +549,7 @@ pip install --upgrade streamlit
 ```bash
 streamlit run gui_app.py --server.port 8502
 # or with Docker:
-docker run -p 8502:8501 ... ghcr.io/frischwood/A3Dshell:latest
+docker run -p 8502:8501 ... ghcr.io/frischwood/A3Dshell:v0.2.0
 ```
 
 **Blank screen or GUI not loading:**
@@ -640,7 +640,7 @@ sudo chown -R 1000:1000 output/ cache/ config/
 
 Pull from GitHub Container Registry:
 ```bash
-docker pull ghcr.io/frischwood/A3Dshell:latest    # Latest stable
+docker pull ghcr.io/frischwood/A3Dshell:v0.2.0    # Latest stable
 docker pull ghcr.io/frischwood/A3Dshell:v1.0.0    # Specific version
 docker pull ghcr.io/frischwood/A3Dshell:1.0       # Minor version
 ```
