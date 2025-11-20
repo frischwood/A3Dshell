@@ -418,51 +418,35 @@ docker run --rm \
 
 ### Required Parameters
 
-**[GENERAL]**
-- `SIMULATION_NAME`: Unique identifier (no spaces)
-- `START_DATE`, `END_DATE`: Simulation period (ISO 8601 format)
-
-**[INPUT]**
-- `EAST_epsg2056`, `NORTH_epsg2056`, `altLV95`: Point of interest coordinates
-
-### ROI Options
-
-**Bounding Box Mode** (default):
 ```ini
-USE_SHP_ROI = false
-ROI = 1000  # Size in meters
+[GENERAL]
+SIMULATION_NAME = your_simulation  # Unique identifier (no spaces)
+START_DATE = 2023-10-01T00:00:00   # ISO 8601 format
+END_DATE = 2023-10-31T23:59:59
+
+[INPUT]
+EAST_epsg2056 = 783500   # POI coordinates
+NORTH_epsg2056 = 189500
+altLV95 = 1560
 ```
-Creates a square region around the POI.
 
-**Shapefile Mode**:
-```ini
-USE_SHP_ROI = true
-ROI_SHAPEFILE = /path/to/roi.shp
-```
-Uses custom shapefile geometry. Supports .shp files or .zip archives.
+### ROI Definition
 
-### Output Options
+**Bounding Box** (default): `USE_SHP_ROI = false`, `ROI = 1000` (meters)
+**Shapefile**: `USE_SHP_ROI = true`, `ROI_SHAPEFILE = /path/to/roi.shp` (supports .shp or .zip)
 
-- `GSD`: Output grid spacing in meters (lower = higher resolution)
-- `GSD_ref`: Reference DEM resolution (2.0 or 0.5 meters)
-- `OUT_COORDSYS`: CH1903+ or CH1903 (recommended)
-- `DEM_ADDFMTLIST`: Additional formats like "tif"
+### Output Settings
+
+- `GSD`: Grid spacing in meters (lower = finer resolution)
+- `GSD_ref`: Reference DEM resolution (2.0 or 0.5)
+- `OUT_COORDSYS`: CH1903+ (recommended) or CH1903
+- `DEM_ADDFMTLIST`: Additional formats (e.g., "tif")
 - `MESH_FMT`: Mesh format (vtu, vtk, stl)
 
-### Land Use Options
+### Land Use
 
-**Use Constant Value**:
-```ini
-USE_LUS_TLM = false
-LUS_PREVAH_CST = 11500
-```
-Assigns single land use type (format: 1LLCD where LL is PREVAH code).
-
-**SwissTLMRegio Integration** (Future Feature):
-```ini
-USE_LUS_TLM = true  # Not yet implemented
-```
-Automatic download of Swiss topographic land use data - coming in future release.
+**Constant value**: `USE_LUS_TLM = false`, `LUS_PREVAH_CST = 11500` (format: 1LLCD)
+**SwissTLM3D**: `USE_LUS_TLM = true` (automatic Swiss topographic land use data)
 
 <!-- ### Advanced Options
 
@@ -562,14 +546,6 @@ docker-compose up
 docker-compose -f docker-compose.registry.yml pull
 docker-compose -f docker-compose.registry.yml up
 
-# Check browser console for errors (F12 in most browsers)
-# Try accessing: http://localhost:8501/_stcore/health
-```
-
-<!-- **Can't find config files:**
-- Ensure you're in the correct directory
-- Configs should be in `config/` folder
-- With Docker, make sure volumes are mounted correctly -->
 
 ### CLI Issues
 
@@ -585,30 +561,6 @@ python -m src.cli --config simulation.ini
 pip install -r requirements.txt
 
 ```
-<!-- # or for conda:
- conda install -c conda-forge geopandas rasterio pyproj -->
-
-<!-- ### Common Problems
-
-**Shapefile Not Found:**
-- Use absolute paths: `/full/path/to/roi.shp`
-- Ensure all files present (.shp, .shx, .dbf, .prj)
-- .zip archives are supported
-
-**Snowpack Execution Failed:**
-- Verify installation: `which snowpack`
-- Specify full path: `SP_BIN_PATH = /usr/local/bin/snowpack`
-- Or skip: `--skip-snowpack`
-
-**DEM Download Issues:**
-- Check internet connection
-- Swisstopo may have rate limits
-- Cache will prevent re-downloading
-
-**Out of Memory:**
-- Reduce ROI size
-- Increase GSD (coarser resolution)
-- Close other applications -->
 
 ### Docker-Specific Issues
 
@@ -676,67 +628,6 @@ Three directories should be mounted for persistence:
 - `./cache` → `/app/a3dshell/cache` - Downloaded data cache
 - `./config` → `/app/a3dshell/config` - Configuration files
 
-<!-- **Shapefile Storage:**
-
-When using custom shapefiles for ROI definition, they **must be stored in a mounted volume**. The recommended approach:
-
-1. **Store in `config/` directory** (already mounted):
-   ```bash
-   # Place your shapefiles here
-   a3dshell/
-   ├── config/
-   │   ├── my_roi.shp
-   │   ├── my_roi.shx
-   │   ├── my_roi.dbf
-   │   ├── my_roi.prj
-   │   └── example_quick_test.ini
-   ```
-
-2. **Or create a dedicated `shapefiles/` directory**:
-   ```bash
-   # Create shapefiles directory
-   mkdir -p shapefiles
-
-   # Add volume mount to docker run command
-   docker run --rm -p 8501:8501 \
-     -v $(pwd)/output:/app/a3dshell/output \
-     -v $(pwd)/cache:/app/a3dshell/cache \
-     -v $(pwd)/config:/app/a3dshell/config \
-     -v $(pwd)/shapefiles:/app/a3dshell/shapefiles:ro \
-     ghcr.io/frischwood/A3Dshell:latest
-   ```
-
-3. **In the GUI**:
-   - The shapefile browser will search the directory you specify (default: `config/`)
-   - Only files in mounted volumes are accessible
-   - Files outside mounted volumes cannot be read by the container
-
-**Important**: Shapefiles consist of multiple files (`.shp`, `.shx`, `.dbf`, `.prj`). Make sure all components are in the same directory! -->
-
-<!-- ### Docker Compose
-
-Easier than plain docker commands:
-
-**docker-compose.registry.yml** (uses pre-built image):
-```bash
-# Start GUI
-docker-compose -f docker-compose.registry.yml up
-
-# Run CLI
-docker-compose -f docker-compose.registry.yml run --rm a3dshell \
-  python -m src.cli --config config/example_quick_test.ini
-
-# Stop
-docker-compose -f docker-compose.registry.yml down
-```
-
-**docker-compose.yml** (builds locally):
-```bash
-cd docker/
-docker-compose build
-docker-compose up  # GUI
-docker-compose run --rm a3dshell python -m src.cli --config ../config/example_quick_test.ini
-``` -->
 
 ## Directory Structure
 
@@ -777,71 +668,6 @@ a3dshell/
 └── README.md              # This file
 ```
 
-<!-- ## Example Workflows
-
-### Workflow 1: Quick Test with GUI
-
-```bash
-# Pull and start
-docker pull ghcr.io/frischwood/A3Dshell:latest
-docker run -p 8501:8501 -v $(pwd)/output:/app/a3dshell/output ghcr.io/frischwood/A3Dshell:latest
-
-# In browser (localhost:8501):
-# 1. Load example_quick_test.ini
-# 2. Click "Run Simulation"
-# 3. Wait ~2-5 minutes
-# 4. Check output/ folder
-```
-
-### Workflow 2: Production Run with CLI
-
-```bash
-# Create config
-python -m src.cli --create-template config/production.ini
-
-# Edit config file with your parameters
-
-# Run simulation
-docker run --rm \
-  -v $(pwd)/output:/app/a3dshell/output \
-  -v $(pwd)/cache:/app/a3dshell/cache \
-  -v $(pwd)/config:/app/a3dshell/config \
-  ghcr.io/frischwood/A3Dshell:latest \
-  python -m src.cli --config config/production.ini --log-level DEBUG
-
-# Results in output/production/
-```
-
-### Workflow 3: Custom Shapefile ROI
-
-```bash
-# Prepare shapefile in local directory: ./shapefiles/my_roi.shp
-
-# Run with shapefile
-docker run --rm \
-  -v $(pwd)/output:/app/a3dshell/output \
-  -v $(pwd)/cache:/app/a3dshell/cache \
-  -v $(pwd)/config:/app/a3dshell/config \
-  -v $(pwd)/shapefiles:/app/shapefiles:ro \
-  ghcr.io/frischwood/A3Dshell:latest \
-  python -m src.cli \
-    --name custom_region \
-    --poi-x 783500 --poi-y 189500 --poi-z 1560 \
-    --use-shp-roi \
-    --roi-shapefile /app/shapefiles/my_roi.shp \
-    --gsd 5 \
-    --start 2023-10-01T00:00:00 \
-    --end 2023-10-31T23:59:59
-``` -->
-
-<!-- ## Additional Resources
-
-- **Example Configs**: See `config/` directory
-- **Binary Installation**: See `input/bin/README.md`
-- **Docker Maintainer Docs**: See `docker/DOCKER.md`
-- **Quick Start Guide**: See `QUICKSTART.md`
-- **Implementation Details**: See `COMPLETION_SUMMARY.md` -->
-
 ## Future Development
 
 The following features are planned for future releases:
@@ -849,11 +675,9 @@ The following features are planned for future releases:
 - Support for additional DEM sources beyond Swisstopo
 - Integration with additional meteorological data sources
 
-Contributions and feature requests are welcome!
-
 ## Support & Contributing
 
-For issues, questions, or contributions, please visit the project repository.
+Contributions and feature requests are welcome!
 
 ## License
 
