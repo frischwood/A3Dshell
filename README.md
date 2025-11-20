@@ -845,16 +845,7 @@ docker run --rm \
 ## Future Development
 
 The following features are planned for future releases:
-
-### SwissTLMRegio Land Use Integration
-Automatic download and processing of Swiss topographic land use data:
-- Seamless integration with Swisstopo API
-- Automatic conversion to PREVAH land use codes
-- Support for custom mapping tables
-- **Status**: Planned
-- **Current workaround**: Use constant land use value (`USE_LUS_TLM = false`)
-
-### Additional Planned Features
+- Support for additional land cover sources.
 - Support for additional DEM sources beyond Swisstopo
 - Integration with additional meteorological data sources
 
