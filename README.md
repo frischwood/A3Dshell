@@ -518,7 +518,7 @@ The tool automatically caches downloaded data:
 
 ### GUI Issues
 
-**⚠️ Important: Always use `http://localhost:8501` not `http://0.0.0.0:8501`**
+**Use `http://localhost:8501` not `http://0.0.0.0:8501`**
 
 The address `0.0.0.0` is for server binding and cannot be accessed from a browser. Always use:
 - `http://localhost:8501`
@@ -588,26 +588,6 @@ sudo chown -R 1000:1000 output/ cache/ config/
 
 ## Docker Details
 
-### Available Images
-
-Pull from GitHub Container Registry:
-```bash
-docker pull ghcr.io/frischwood/A3Dshell:latest    # Latest stable
-docker pull ghcr.io/frischwood/A3Dshell:v1.0.0    # Specific version
-docker pull ghcr.io/frischwood/A3Dshell:1.0       # Minor version
-```
-
-### What's Included
-
-The Docker image contains:
-- ✅ Python 3.11 with all dependencies
-- ✅ GDAL and geospatial libraries
-- ✅ MeteoIO and Snowpack (compiled from source)
-- ✅ All input data (BRDF files, templates, IMIS metadata)
-- ✅ GUI and CLI ready to use
-- ✅ Complete environment (~1.2 GB)
-- ✅ **Version tracking**: Each image includes BUILD_INFO.txt with exact MeteoIO/Snowpack commit hashes for reproducibility
-
 ### Version Information
 
 To check which versions of MeteoIO and Snowpack are included in your Docker image:
@@ -618,8 +598,6 @@ docker run --rm ghcr.io/frischwood/A3Dshell:v1.0.0 cat BUILD_INFO.txt
 
 # Or via the GUI: Open http://localhost:8501 → Check sidebar "About" section
 ```
-
-This ensures scientific reproducibility by tracking the exact source code versions used to build MeteoIO and Snowpack.
 
 ### Volume Mounts
 
@@ -674,6 +652,8 @@ The following features are planned for future releases:
 - Support for additional land cover sources.
 - Support for additional DEM sources beyond Swisstopo
 - Integration with additional meteorological data sources
+- Support user's A3D io.ini (A3Dshell input -> setup/input)
+- Radiation complex scheme options (terrain mesh, pv mesh, pv file with direct Viz)
 
 ## Support & Contributing
 
