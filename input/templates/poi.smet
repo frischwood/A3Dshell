@@ -1,0 +1,7 @@
+SMET 1.1 ASCII
+[HEADER]
+station_id = poi
+epsg = {epsg}
+nodata = -999
+fields = easting northing altitude #altitude here is in epsg (~amsl)
+[DATA]

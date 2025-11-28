@@ -1,0 +1,47 @@
+# A3Dshell Web-Hosted Frontend
+# Docker Compose configuration for deployment
+#
+# Prerequisites:
+# - MeteoIO, Snowpack, and Alpine3D binaries installed on host
+# - Adjust binary paths in environment section
+
+version: '3.8'
+
+services:
+  a3dshell:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: a3dshell-web
+    ports:
+      - "8501:8501"
+    volumes:
+      # Persistent storage for cache and output
+      - ./cache:/app/cache
+      - ./output:/app/output
+      - ./config:/app/config
+      # Mount host binaries (if not installed in container)
+      # - /usr/local/bin/snowpack:/usr/local/bin/snowpack:ro
+      # - /usr/local/bin/meteoio_timeseries:/usr/local/bin/meteoio_timeseries:ro
+      # - /usr/local/bin/alpine3d:/usr/local/bin/alpine3d:ro
+    environment:
+      # Binary paths - adjust to match your installation
+      - SNOWPACK_BIN=/usr/local/bin/snowpack
+      - METEOIO_BIN=/usr/local/bin/meteoio_timeseries
+      - ALPINE3D_BIN=/usr/local/bin/alpine3d
+      # Directory paths
+      - A3D_CACHE_DIR=/app/cache
+      - A3D_OUTPUT_DIR=/app/output
+      - A3D_TEMPLATE_DIR=/app/input/templates
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+# Optional: Add traefik or nginx reverse proxy for HTTPS
+# networks:
+#   web:
+#     external: true

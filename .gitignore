@@ -1,0 +1,105 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.claude/
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Input data (keep structure but not content)
+input/*
+!input/.gitkeep
+!input/brdf-files/
+!input/templates/
+!input/imis/
+!input/tlm/
+!input/bin/
+input/bin/*
+!input/bin/.gitkeep
+
+# Shapefiles (custom user shapefiles)
+config/shapefiles/*
+!config/shapefiles/.gitkeep
+
+# Outputs (don't commit simulation results)
+output/*
+!output/.gitkeep
+
+# Cache (don't commit downloaded data, but keep directory structure)
+cache/*
+!cache/.gitkeep
+!cache/dem_tiles/
+!cache/maps/
+cache/dem_tiles/*
+!cache/dem_tiles/.gitkeep
+cache/maps/*
+!cache/maps/.gitkeep
+
+# Logs
+*.log
+*.log.*
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# User configurations (optionally commit)
+# config/*.ini  # Uncomment to ignore user configs
+
+# Keep example configs
+!config/example*.ini
+
+# Documentation (can be generated)
+# Uncomment if you don't want these in git:
+# IMPLEMENTATION_STATUS.md
+# COMPLETION_SUMMARY.md
+# SETUP_COMPLETE.md
+
+# Downloaded TLM data
+input/tlm/*
+
+# Jupyter notebooks (if any)
+*.ipynb
+.ipynb_checkpoints/
+
+# OS specific
+Thumbs.db
+.DS_Store
+
+# Backup files
+*.bak
+*.backup
+*~
+
+Dev files to ignore on main branch
+COMPLETION_SUMMARY.md
+IMPLEMENTATION_STATUS.md
+SETUP_COMPLETE.md   
+GUI_README*
+QUICKSTART.md
+BUILD_NOTES.md
+DOCKER.md
+PUBLISHING.md
+COMMIT_CHECKLIST.md
+
+copy_input_files.sh
+
+docker-quickstart.sh

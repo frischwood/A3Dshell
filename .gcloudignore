@@ -1,0 +1,55 @@
+# A3Dshell Web - Cloud Run deployment ignore file
+# Files listed here will not be uploaded during `gcloud run deploy --source .`
+
+# Git
+.git/
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local development
+.env
+.env.local
+*.log
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Cache and output directories (will be created fresh in container)
+cache/
+output/
+config/
+
+# Documentation and development files
+*.md
+!README.md
+LICENSE
+docs/
+
+# Test files
+tests/
+test_*.py
+*_test.py
+pytest.ini
+.pytest_cache/
+
+# Docker development files (not needed for Cloud Build)
+docker-compose*.yml
+Dockerfile.dev
