@@ -2,6 +2,8 @@
 
 A Streamlit-based web service for A3Dshell Alpine3D simulations. This version is designed for server deployment with pre-installed binaries.
 
+**Live:** https://a3dshell-721977282288.europe-west6.run.app
+
 ## Features
 
 - **Switzerland Mode**: Automatic DEM download from Swisstopo APIs
@@ -86,6 +88,20 @@ gcloud run domain-mappings create \
 # Follow the DNS instructions provided by gcloud
 # Add the CNAME or A records to your domain registrar
 ```
+
+**Auto-Deploy on Push (CI/CD):**
+
+Set up automatic deployment when pushing to the `main` branch:
+
+1. Go to [Cloud Build Triggers](https://console.cloud.google.com/cloud-build/triggers?project=a3dshell)
+2. Click **Create Trigger** → **Connect Repository** → Select GitHub
+3. Configure:
+   - Name: `deploy-on-push`
+   - Event: Push to branch `^main$`
+   - Configuration: Cloud Build configuration file `/cloudbuild.yaml`
+4. Click **Create**
+
+Subsequent deployments take ~2-5 minutes (cached builds).
 
 ### Using Docker Compose (Self-Hosted)
 
