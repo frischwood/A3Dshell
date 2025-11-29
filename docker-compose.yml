@@ -25,6 +25,10 @@ services:
       # - /usr/local/bin/meteoio_timeseries:/usr/local/bin/meteoio_timeseries:ro
       # - /usr/local/bin/alpine3d:/usr/local/bin/alpine3d:ro
     environment:
+      # Enable Run A3D tab for local Docker builds
+      - A3D_ENABLE_RUN_TAB=true
+      # Enable IMIS/Snowpack (requires VPN access to SLF database)
+      - A3D_IMIS_AVAILABLE=true
       # Binary paths - adjust to match your installation
       - SNOWPACK_BIN=/usr/local/bin/snowpack
       - METEOIO_BIN=/usr/local/bin/meteoio_timeseries

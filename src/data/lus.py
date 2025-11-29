@@ -49,47 +49,51 @@ class LUSProcessor:
     }
 
     # BFS Arealstatistik LC_27 to PREVAH mapping
-    # LC_27 = 27 land cover categories (NOLC04)
+    # LC_27 codes: 11-17 (urban), 21 (grass), 31-35 (shrubs/crops), 41-47 (forest), 51-53 (rock), 61-64 (water/wet)
     # PREVAH codes: 01=water, 02=settlement, 03=coniferous forest, 04=deciduous forest,
     # 05=mixed forest, 06=cereals, 07=pasture, 08=bush, 11=road, 13=firn, 14=bare ice,
     # 15=rock, 18=fruit, 19=vegetables, 20=wheat, 21=alpine vegetation, 22=wetlands,
     # 23=rough pasture, 24=subalpine meadow, 25=alpine meadow, 26=bare soil vegetation,
     # 27=free, 28=corn, 29=grapes
     LC27_TO_PREVAH = {
-        # Settlement/Urban (LC_27 categories 1-8)
-        1: 2,   # Industrial buildings -> settlement
-        2: 2,   # Commercial/services -> settlement
-        3: 2,   # Residential -> settlement
-        4: 2,   # Agricultural buildings -> settlement
-        5: 2,   # Unspecified buildings -> settlement
-        6: 11,  # Transport areas -> road
-        7: 2,   # Special urban areas -> settlement
-        8: 7,   # Recreation/green spaces -> pasture
+        # Urban/Built-up (LC_27: 11-17)
+        11: 11,  # Befestigte Flächen (sealed surfaces) -> road
+        12: 2,   # Gebäude (buildings) -> settlement
+        13: 2,   # Treibhäuser (greenhouses) -> settlement
+        14: 19,  # Beetstrukturen (garden beds) -> vegetables
+        15: 7,   # Rasen (lawn) -> pasture
+        16: 8,   # Bäume auf künstlich angelegten Flächen -> bush
+        17: 2,   # Gemischte Kleinstrukturen -> settlement
 
-        # Agricultural (LC_27 categories 9-14)
-        9: 18,  # Orchards -> fruit
-        10: 29, # Vineyards -> grapes
-        11: 19, # Horticulture -> vegetables
-        12: 6,  # Arable land -> cereals
-        13: 7,  # Meadows/pastures -> pasture
-        14: 23, # Alpine pastures -> rough pasture
+        # Grassland (LC_27: 21)
+        21: 7,   # Gras-, Krautvegetation -> pasture
 
-        # Forest (LC_27 categories 15-18)
-        15: 5,  # Dense forest -> mixed forest
-        16: 5,  # Open forest -> mixed forest
-        17: 8,  # Shrub forest -> bush
-        18: 8,  # Hedges/groves -> bush
+        # Shrubs/Crops (LC_27: 31-35)
+        31: 8,   # Gebüsch (shrubs) -> bush
+        32: 8,   # Verbuschte Flächen (overgrown) -> bush
+        33: 18,  # Niederstammobst (fruit trees) -> fruit
+        34: 29,  # Reben (vines) -> grapes
+        35: 19,  # Gärtnerische Dauerkulturen -> vegetables
 
-        # Unproductive (LC_27 categories 19-27)
-        19: 1,  # Standing water -> water
-        20: 1,  # Flowing water -> water
-        21: 21, # Unproductive vegetation -> alpine vegetation
-        22: 26, # Bare ground (rock/gravel) -> bare soil vegetation
-        23: 15, # Rock -> rock
-        24: 26, # Sand/gravel -> bare soil vegetation
-        25: 14, # Glacier/firn -> bare ice
-        26: 22, # Wetlands -> wetlands
-        27: 27, # Other unproductive -> free
+        # Forest (LC_27: 41-47)
+        41: 5,   # Geschlossene Baumbestände (closed forest) -> mixed forest
+        42: 5,   # Waldecken (forest corners) -> mixed forest
+        43: 5,   # Waldstreifen (forest strips) -> mixed forest
+        44: 5,   # Aufgelöste Baumbestände (open forest) -> mixed forest
+        45: 8,   # Gebüschwaldbestände (shrub forest) -> bush
+        46: 5,   # Lineare Baumbestände (linear trees) -> mixed forest
+        47: 5,   # Baumgruppen (tree groups) -> mixed forest
+
+        # Rock/Stone (LC_27: 51-53)
+        51: 15,  # Anstehender Fels (exposed rock) -> rock
+        52: 15,  # Lockergestein (loose rock) -> rock
+        53: 15,  # Versteinte Flächen (stony areas) -> rock
+
+        # Water/Wet (LC_27: 61-64)
+        61: 1,   # Wasser (water) -> water
+        62: 13,  # Gletscher, Firn -> firn
+        63: 22,  # Nassstandorte (wet sites) -> wetlands
+        64: 22,  # Schilfbestände (reed stands) -> wetlands
     }
 
     def __init__(self, path_manager):
@@ -328,13 +332,24 @@ class LUSProcessor:
         """
         from shapely.geometry import box as shapely_box
 
-        # Read DEM metadata
+        # Read DEM metadata and bounds
         with rasterio.open(dem_file) as dem:
             meta = dem.meta.copy()
+            dem_bounds = dem.bounds
+            dem_crs = dem.crs
 
-        # Read BFS GeoPackage
+        # Read BFS GeoPackage with spatial filter (file is ~1.2GB, must filter!)
+        # BFS file is in EPSG:2056 - transform bounds if needed
         logger.info(f"   Loading BFS Arealstatistik from {bfs_gpkg_path.name}")
-        bfs_data = gpd.read_file(bfs_gpkg_path)
+        bbox_for_filter = dem_bounds
+        if dem_crs and str(dem_crs) != "EPSG:2056":
+            from pyproj import Transformer
+            transformer = Transformer.from_crs(dem_crs, "EPSG:2056", always_xy=True)
+            minx, miny = transformer.transform(dem_bounds.left, dem_bounds.bottom)
+            maxx, maxy = transformer.transform(dem_bounds.right, dem_bounds.top)
+            bbox_for_filter = (minx, miny, maxx, maxy)
+        logger.info(f"   Filtering to bounds: {bbox_for_filter}")
+        bfs_data = gpd.read_file(bfs_gpkg_path, bbox=bbox_for_filter)
 
         # Convert to target CRS
         if bfs_data.crs.to_string() != target_crs:

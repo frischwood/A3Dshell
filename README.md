@@ -60,9 +60,24 @@ your_simulation/
 └── ...
 ```
 
-## Running Alpine3D
+## Run Locally with Docker
 
-This web tool prepares the simulation inputs. To actually run Alpine3D simulations, use the standalone [A3Dshell](https://github.com/frischwood/A3Dshell) with Docker, which includes the Alpine3D binary.
+```bash
+# Clone and build
+git clone https://github.com/frischwood/A3Dshell-web.git
+cd A3Dshell-web
+docker-compose up --build
+
+# Open browser to http://localhost:8501
+```
+
+The Docker image includes MeteoIO and Snowpack binaries. Output files are saved to `./output/`.
+
+**Local-only features** (enabled via docker-compose environment variables):
+- **IMIS/Snowpack preprocessing** - Requires SLF VPN access to the IMIS database
+- **Run A3D tab** - Execute Alpine3D simulations directly
+
+These features are disabled in the hosted web version. Running `streamlit run gui_app.py` directly won't enable them - use `docker-compose up` instead.
 
 ## License
 

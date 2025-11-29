@@ -14,8 +14,6 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import configparser
 import os
-import zipfile
-import io
 import folium
 from streamlit_folium import st_folium
 from folium.plugins import Draw
@@ -76,17 +74,6 @@ def find_shapefiles(base_dir):
         return shapefiles
     except Exception:
         return []
-
-def create_zip_from_folder(folder_path):
-    """Create a ZIP file from a folder and return as bytes."""
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        for file_path in Path(folder_path).rglob('*'):
-            if file_path.is_file():
-                arcname = file_path.relative_to(folder_path)
-                zip_file.write(file_path, arcname)
-    zip_buffer.seek(0)
-    return zip_buffer.getvalue()
 
 @st.cache_data(ttl=3600)
 def get_swiss_boundary_polygon():
@@ -923,11 +910,18 @@ with mode_tab_switzerland:
             if 'poi_list_ch' not in st.session_state:
                 st.session_state.poi_list_ch = []
 
+            # Get ROI info from session state
+            _roi_shapefile = st.session_state.config.get('roi_shapefile', '')
+            _use_shapefile = bool(_roi_shapefile)
+            _poi_x = float(st.session_state.config.get('poi_x', 0) or 0)
+            _poi_y = float(st.session_state.config.get('poi_y', 0) or 0)
+            _roi_size = float(st.session_state.config.get('roi_size', 1000) or 1000)
+
             # Get ROI bounds for validation
-            if use_shapefile and roi_shapefile:
+            if _use_shapefile and _roi_shapefile:
                 # Load shapefile to get bounds
                 try:
-                    roi_gdf = gpd.read_file(roi_shapefile)
+                    roi_gdf = gpd.read_file(_roi_shapefile)
                     if roi_gdf.crs and roi_gdf.crs.to_epsg() != 2056:
                         roi_gdf = roi_gdf.to_crs("EPSG:2056")
                     roi_bounds = roi_gdf.total_bounds  # (minx, miny, maxx, maxy)
@@ -937,8 +931,8 @@ with mode_tab_switzerland:
                     roi_polygon = None
             else:
                 # Bounding box mode
-                half_size = roi_size / 2
-                roi_bounds = (poi_x - half_size, poi_y - half_size, poi_x + half_size, poi_y + half_size)
+                half_size = _roi_size / 2
+                roi_bounds = (_poi_x - half_size, _poi_y - half_size, _poi_x + half_size, _poi_y + half_size)
                 roi_polygon = None
 
             # Two columns: map on left, form/table on right
@@ -959,15 +953,20 @@ with mode_tab_switzerland:
 
                 poi_map = folium.Map(
                     location=[center_lat, center_lon],
-                    zoom_start=12,
                     tiles="https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg",
                     attr="swisstopo"
                 )
 
+                # Auto-fit map to ROI bounds
+                if roi_bounds is not None:
+                    sw_lon, sw_lat = transformer_to_wgs.transform(roi_bounds[0], roi_bounds[1])
+                    ne_lon, ne_lat = transformer_to_wgs.transform(roi_bounds[2], roi_bounds[3])
+                    poi_map.fit_bounds([[sw_lat, sw_lon], [ne_lat, ne_lon]])
+
                 # Draw ROI boundary on map
                 if roi_bounds is not None:
                     transformer_to_wgs = Transformer.from_crs("EPSG:2056", "EPSG:4326", always_xy=True)
-                    if roi_polygon is not None and use_shapefile:
+                    if roi_polygon is not None and _use_shapefile:
                         # Draw shapefile polygon
                         from shapely.geometry import mapping
                         import json
@@ -1212,9 +1211,19 @@ with mode_tab_switzerland:
     with tab5:
         st.header("Meteo files retrieval with Snowpack")
 
-        skip_snowpack = st.checkbox("Skip Snowpack preprocessing",
-                                    value=False,
-                                    help="Disable Snowpack preprocessing step. Meteo files will not be downloaded and preprocessed (RSWR --> ISWR).")
+        # IMIS database access requires VPN - only available in local Docker builds
+        _IMIS_AVAILABLE = os.environ.get('A3D_IMIS_AVAILABLE', '').lower() in ('true', '1', 'yes')
+
+        if not _IMIS_AVAILABLE:
+            st.info("**Snowpack preprocessing disabled** - The web version cannot access the SLF/IMIS database for meteo retrieval. Run locally with Docker to enable.")
+            skip_snowpack = st.checkbox("Skip Snowpack preprocessing",
+                                        value=True,
+                                        disabled=True,
+                                        help="Snowpack preprocessing requires VPN access to SLF/IMIS database.")
+        else:
+            skip_snowpack = st.checkbox("Skip Snowpack preprocessing",
+                                        value=False,
+                                        help="Disable Snowpack preprocessing step. Meteo files will not be downloaded and preprocessed (RSWR --> ISWR).")
 
         buffer_size = st.number_input(
             "Buffer Size for IMIS Stations (meters)",
@@ -1222,8 +1231,7 @@ with mode_tab_switzerland:
             min_value=1000,
             max_value=200000,
             step=1000,
-            help="Distance to search for meteorological stations around the ROI",
-            disabled=skip_snowpack
+            help="Distance to search for meteorological stations around the ROI. Stations within this buffer will be detected."
         )
 
         # Snowpack configuration (only shown if not skipping)
@@ -1437,8 +1445,8 @@ USE_SHP_ROI = {'true' if use_shapefile else 'false'}
     
         # Show validation status
         if not roi_validated:
-            st.error("🚫 Cannot run simulation: ROI/POI must be confirmed within Swiss boundaries")
-            st.info("💡 Go to the **Location & ROI** tab to configure and validate your region of interest.")
+            st.error("Cannot run simulation: ROI/POI must be confirmed within Swiss boundaries")
+            st.info("Go to the **Location & ROI** tab to configure and validate your region of interest.")
     
         # Disable button if validation failed
         if st.button("▶️ Start Run", type="primary", width="stretch", disabled=not roi_validated):
@@ -1546,15 +1554,19 @@ USE_SHP_ROI = {'true' if use_shapefile else 'false'}
                             st.session_state.config['a3d_working_dir'] = str(output_dir)
                             st.info("Working directory set for **Run A3D** tab.")
 
-                            # Create ZIP and offer download
-                            zip_data = create_zip_from_folder(output_dir)
-                            st.download_button(
-                                label="📥 Download Simulation Package (.zip)",
-                                data=zip_data,
-                                file_name=f"{simu_name}.zip",
-                                mime="application/zip",
-                                help="Download prepared simulation files to run locally"
-                            )
+                            # Offer download of the ZIP file produced by the CLI
+                            zip_path = Path("output") / f"{simu_name}.zip"
+                            if zip_path.exists():
+                                with open(zip_path, "rb") as f:
+                                    zip_data = f.read()
+                                st.download_button(
+                                    label="Download Simulation Package (.zip)",
+                                    data=zip_data,
+                                    file_name=f"{simu_name}.zip",
+                                    mime="application/zip"
+                                )
+                            else:
+                                st.warning(f"ZIP file not found at {zip_path}")
                     else:
                         st.error(f"❌ Run failed with exit code {process.returncode}")
 
@@ -1567,13 +1579,15 @@ USE_SHP_ROI = {'true' if use_shapefile else 'false'}
                         temp_config.unlink()
 
     # ============================================================
-    # Tab 7: Run A3D (Disabled)
+    # Tab 7: Run A3D (enabled via A3D_ENABLE_RUN_TAB env var for local Docker)
     # ============================================================
     with tab7:
-        st.info("🚧 **Run A3D** - This feature is not available in the web version. Please use the standalone [A3Dshell](https://github.com/frischwood/A3Dshell) application to run Alpine3D simulations.")
+        # Enable Tab 7 when running locally with Docker (set in docker-compose.yml)
+        _TAB7_ENABLED = os.environ.get('A3D_ENABLE_RUN_TAB', '').lower() in ('true', '1', 'yes')
 
-        # Tab disabled for web version - content preserved below but not rendered
-        _TAB7_ENABLED = False
+        if not _TAB7_ENABLED:
+            st.info("**Run A3D** - This feature is not available in the web version. Run locally with Docker to enable.")
+
         if _TAB7_ENABLED:
             # Default to session state if set, otherwise try output/{simu_name}
             default_working_dir = st.session_state.config.get('a3d_working_dir', '')
@@ -1690,7 +1704,7 @@ USE_SHP_ROI = {'true' if use_shapefile else 'false'}
 # OTHER LOCATIONS MODE
 # ============================================================
 with mode_tab_other:
-    st.info("ℹ️ **Other Locations Mode**: Provide your own DEM (GeoTIFF) and land cover settings. Meteorological data must be provided manually after setup.")
+    st.info("**Other Locations Mode**: Provide your own DEM (GeoTIFF) and land cover settings. Meteorological data must be provided manually after setup.")
 
     # Tabs for Other Locations mode (matching Switzerland structure)
     tab1_other, tab2_other, tab3_other, tab4_other = st.tabs(["1. General", "2. DEM", "3. Land Cover", "4. Run"])
@@ -2050,11 +2064,7 @@ st.markdown("""
     <p style='margin-bottom: 5px;'><strong>A3Dshell</strong> </p>
     <p style='margin: 5px 0;'>
         <a href='https://github.com/frischwood/A3Dshell-web' target='_blank' style='color: #0366d6; text-decoration: none;'>
-            GitHub Repository
-        </a>
-        &nbsp;|&nbsp;
-        <a href='https://github.com/frischwood/A3Dshell-web/blob/main/LICENSE' target='_blank' style='color: #0366d6; text-decoration: none;'>
-            MIT License
+            GitHub
         </a>
     </p>
     <p style='margin-top: 5px; font-size: 0.85em;'>
