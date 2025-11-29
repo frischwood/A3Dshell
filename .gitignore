@@ -89,7 +89,8 @@ Thumbs.db
 *.backup
 *~
 
-Dev files to ignore on main branch
+# Dev files to ignore on main branch
+DEV_NOTES.md
 COMPLETION_SUMMARY.md
 IMPLEMENTATION_STATUS.md
 SETUP_COMPLETE.md   

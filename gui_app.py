@@ -14,6 +14,8 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import configparser
 import os
+import zipfile
+import io
 import folium
 from streamlit_folium import st_folium
 from folium.plugins import Draw
@@ -74,6 +76,17 @@ def find_shapefiles(base_dir):
         return shapefiles
     except Exception:
         return []
+
+def create_zip_from_folder(folder_path):
+    """Create a ZIP file from a folder and return as bytes."""
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for file_path in Path(folder_path).rglob('*'):
+            if file_path.is_file():
+                arcname = file_path.relative_to(folder_path)
+                zip_file.write(file_path, arcname)
+    zip_buffer.seek(0)
+    return zip_buffer.getvalue()
 
 @st.cache_data(ttl=3600)
 def get_swiss_boundary_polygon():
@@ -488,7 +501,7 @@ with mode_tab_switzerland:
             end_time = st.time_input("End Time", value=default_end.time())
     
         st.divider()
-        st.info("Continue to the next tab: **2. Location & ROI**")
+        st.info("Continue to the next tab: **2. ROI/DEM**")
     
     # ============================================================
     # Tab 2: Location & ROI
@@ -1407,71 +1420,6 @@ USE_SHP_ROI = {'true' if use_shapefile else 'false'}
 
         st.divider()
 
-        # Download configuration section
-        st.subheader("Download Configuration")
-        st.info("Download the configuration file to run simulations on your local machine with A3Dshell.")
-
-        # Generate config content for download
-        download_config = f"""# A3Dshell Configuration
-# Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-[GENERAL]
-SIMULATION_NAME = {simu_name}
-START_DATE = {start_dt.strftime('%Y-%m-%dT%H:%M:%S')}
-END_DATE = {end_dt.strftime('%Y-%m-%dT%H:%M:%S')}
-
-[INPUT]
-EAST_epsg2056 = {poi_x}
-NORTH_epsg2056 = {poi_y}
-altLV95 = {poi_z}
-USE_SHP_ROI = {'true' if use_shapefile else 'false'}
-"""
-
-        if use_shapefile:
-            download_config += f"ROI_SHAPEFILE = {roi_shapefile}\n"
-        else:
-            download_config += f"ROI = {roi_size}\n"
-
-        download_config += f"BUFFERSIZE = {buffer_size}\n"
-        download_config += f"\n[OUTPUT]\n"
-        download_config += f"OUT_COORDSYS = {coord_sys}\n"
-        download_config += f"GSD = {gsd}\n"
-        download_config += f"GSD_ref = {gsd_ref}\n"
-        download_config += f"DEM_ADDFMTLIST =\n"
-        download_config += f"MESH_FMT = vtu\n"
-        download_config += f"MASK_DEM_TO_POLYGON = {'true' if st.session_state.config.get('mask_dem_to_polygon', True) else 'false'}\n"
-        download_config += f"MASK_LUS_TO_POLYGON = {'true' if st.session_state.config.get('mask_lus_to_polygon', True) else 'false'}\n"
-        download_config += f"\n[MAPS]\n"
-        download_config += f"PLOT_HORIZON = false\n"
-        download_config += f"\n[A3D]\n"
-        download_config += f"USE_GROUNDEYE = false\n"
-        download_config += f"LUS_SOURCE = {lus_source}\n"
-
-        if lus_source == "constant":
-            download_config += f"LUS_PREVAH_CST = {lus_constant}\n"
-
-        download_config += "DO_PVP_3D = false\n"
-        download_config += "PVP_3D_FMT = vtu\n"
-        download_config += "SP_BIN_PATH = snowpack\n"
-
-        # Add POIs if defined
-        if st.session_state.get('poi_list_ch'):
-            download_config += "\n[POIS]\n"
-            for poi in st.session_state.poi_list_ch:
-                download_config += f"{poi['name']} = {poi['x']},{poi['y']},{poi['z']}\n"
-
-        download_filename = f"{simu_name if simu_name else 'a3dshell_config'}.ini"
-
-        st.download_button(
-            label="📥 Download Configuration (.ini)",
-            data=download_config,
-            file_name=download_filename,
-            mime="text/plain",
-            help="Download this configuration file to use with A3Dshell on your local machine"
-        )
-
-        st.divider()
-
         # Run simulation section
         st.header("Run Setup")
 
@@ -1597,6 +1545,16 @@ USE_SHP_ROI = {'true' if use_shapefile else 'false'}
                             # Set working directory for Run A3D tab
                             st.session_state.config['a3d_working_dir'] = str(output_dir)
                             st.info("Working directory set for **Run A3D** tab.")
+
+                            # Create ZIP and offer download
+                            zip_data = create_zip_from_folder(output_dir)
+                            st.download_button(
+                                label="📥 Download Simulation Package (.zip)",
+                                data=zip_data,
+                                file_name=f"{simu_name}.zip",
+                                mime="application/zip",
+                                help="Download prepared simulation files to run locally"
+                            )
                     else:
                         st.error(f"❌ Run failed with exit code {process.returncode}")
 
@@ -1609,125 +1567,124 @@ USE_SHP_ROI = {'true' if use_shapefile else 'false'}
                         temp_config.unlink()
 
     # ============================================================
-    # Tab 7: Run A3D
+    # Tab 7: Run A3D (Disabled)
     # ============================================================
     with tab7:
-        st.header("Alpine3D Configuration")
+        st.info("🚧 **Run A3D** - This feature is not available in the web version. Please use the standalone [A3Dshell](https://github.com/frischwood/A3Dshell) application to run Alpine3D simulations.")
 
-        # Working directory section
-        st.subheader("Working Directory")
-        st.caption("The simulation directory containing the setup files (DEM, LUS, meteo, etc.). Set automatically after running 'Run Config', or specify manually.")
+        # Tab disabled for web version - content preserved below but not rendered
+        _TAB7_ENABLED = False
+        if _TAB7_ENABLED:
+            # Default to session state if set, otherwise try output/{simu_name}
+            default_working_dir = st.session_state.config.get('a3d_working_dir', '')
+            if not default_working_dir and simu_name:
+                potential_dir = f"output/{simu_name}"
+                if Path(potential_dir).exists():
+                    default_working_dir = potential_dir
 
-        # Default to session state if set, otherwise try output/{simu_name}
-        default_working_dir = st.session_state.config.get('a3d_working_dir', '')
-        if not default_working_dir and simu_name:
-            potential_dir = f"output/{simu_name}"
-            if Path(potential_dir).exists():
-                default_working_dir = potential_dir
+            a3d_working_dir = st.text_input(
+                "Working Directory",
+                value=default_working_dir,
+                placeholder="output/my_simulation",
+                help="Path to the simulation directory. Must contain input/ folder with DEM, LUS, and meteo files."
+            )
+            st.session_state.config['a3d_working_dir'] = a3d_working_dir
 
-        a3d_working_dir = st.text_input(
-            "Working Directory",
-            value=default_working_dir,
-            placeholder="output/my_simulation",
-            help="Path to the simulation directory. Must contain input/ folder with DEM, LUS, and meteo files."
-        )
-        st.session_state.config['a3d_working_dir'] = a3d_working_dir
-
-        # Validate working directory
-        working_dir_valid = False
-        if a3d_working_dir:
-            working_dir_path = Path(a3d_working_dir)
-            if working_dir_path.exists():
-                input_dir = working_dir_path / "input"
-                if input_dir.exists():
-                    st.success(f"Working directory found: {a3d_working_dir}")
-                    working_dir_valid = True
+            # Validate working directory
+            working_dir_valid = False
+            if a3d_working_dir:
+                working_dir_path = Path(a3d_working_dir)
+                if working_dir_path.exists():
+                    input_dir = working_dir_path / "input"
+                    if input_dir.exists():
+                        st.success(f"Working directory found: {a3d_working_dir}")
+                        working_dir_valid = True
+                    else:
+                        st.warning(f"Working directory exists but missing 'input/' folder.")
                 else:
-                    st.warning(f"Working directory exists but missing 'input/' folder.")
+                    st.warning(f"Working directory not found: {a3d_working_dir}")
             else:
-                st.warning(f"Working directory not found: {a3d_working_dir}")
-        else:
-            st.info("No working directory specified. Run 'Run Config' first or enter a path manually.")
+                st.info("No working directory specified. Run 'Run Config' first or enter a path manually.")
 
-        st.divider()
+            st.divider()
 
-        # A3D Binary path
-        st.subheader("Alpine3D Binary")
-        st.caption("Binary path is configured via server environment variables. Contact administrator to change.")
+            # A3D Binary path
+            st.subheader("Alpine3D Binary")
+            st.caption("Binary path is configured via server environment variables. Contact administrator to change.")
 
-        # Get default from environment variable
-        default_alpine3d = get_alpine3d_bin()
-        a3d_bin_path = st.text_input(
-            "Alpine3D Binary Path",
-            value=st.session_state.config.get('a3d_bin_path', default_alpine3d),
-            placeholder=default_alpine3d,
-            help=f"Server default: {default_alpine3d} (from ALPINE3D_BIN env var)"
-        )
-        st.session_state.config['a3d_bin_path'] = a3d_bin_path or default_alpine3d
+            # Get default from environment variable
+            default_alpine3d = get_alpine3d_bin()
+            a3d_bin_path = st.text_input(
+                "Alpine3D Binary Path",
+                value=st.session_state.config.get('a3d_bin_path', default_alpine3d),
+                placeholder=default_alpine3d,
+                help=f"Server default: {default_alpine3d} (from ALPINE3D_BIN env var)"
+            )
+            st.session_state.config['a3d_bin_path'] = a3d_bin_path or default_alpine3d
 
-        if not a3d_bin_path and not default_alpine3d:
-            st.warning("No Alpine3D binary path configured. Contact server administrator.")
+            if not a3d_bin_path and not default_alpine3d:
+                st.warning("No Alpine3D binary path configured. Contact server administrator.")
 
-        st.divider()
+            st.divider()
 
-        # A3D INI editor
-        st.subheader("Alpine3D Configuration (INI)")
-        st.caption("Edit the Alpine3D configuration file. This will be used when running the A3D simulation.")
+            # A3D INI editor
+            st.subheader("Alpine3D Configuration (INI)")
+            st.caption("Edit the Alpine3D configuration file. This will be used when running the A3D simulation.")
 
-        # Load A3D INI template (embedded with file override capability)
-        if 'a3d_ini_content' not in st.session_state:
-            try:
-                st.session_state.a3d_ini_content = get_template('a3dConfig.ini')
-            except KeyError:
-                st.session_state.a3d_ini_content = "; Alpine3D configuration template not found"
+            # Load A3D INI template (embedded with file override capability)
+            if 'a3d_ini_content' not in st.session_state:
+                try:
+                    st.session_state.a3d_ini_content = get_template('a3dConfig.ini')
+                except KeyError:
+                    st.session_state.a3d_ini_content = "; Alpine3D configuration template not found"
 
-        a3d_ini_edited = st.text_area(
-            "Alpine3D INI Content",
-            value=st.session_state.a3d_ini_content,
-            height=400,
-            key="a3d_ini_editor"
-        )
-        st.session_state.a3d_ini_content = a3d_ini_edited
+            a3d_ini_edited = st.text_area(
+                "Alpine3D INI Content",
+                value=st.session_state.a3d_ini_content,
+                height=400,
+                key="a3d_ini_editor"
+            )
+            st.session_state.a3d_ini_content = a3d_ini_edited
 
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("Reset to Default", key="reset_a3d_ini"):
-                if a3d_ini_path.exists():
-                    with open(a3d_ini_path, 'r') as f:
-                        st.session_state.a3d_ini_content = f.read()
-                    st.rerun()
-        with col2:
-            if st.button("Save to Template", key="save_a3d_ini"):
-                with open(a3d_ini_path, 'w') as f:
-                    f.write(a3d_ini_edited)
-                st.success("Alpine3D INI template saved!")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Reset to Default", key="reset_a3d_ini"):
+                    if a3d_ini_path.exists():
+                        with open(a3d_ini_path, 'r') as f:
+                            st.session_state.a3d_ini_content = f.read()
+                        st.rerun()
+            with col2:
+                if st.button("Save to Template", key="save_a3d_ini"):
+                    with open(a3d_ini_path, 'w') as f:
+                        f.write(a3d_ini_edited)
+                    st.success("Alpine3D INI template saved!")
 
-        st.divider()
+            st.divider()
 
-        # Run A3D section
-        st.subheader("Run Alpine3D")
+            # Run A3D section
+            st.subheader("Run Alpine3D")
 
-        # Check if ready to run
-        can_run_a3d = bool(a3d_bin_path) and working_dir_valid
+            # Check if ready to run
+            can_run_a3d = bool(a3d_bin_path) and working_dir_valid
 
-        if not working_dir_valid:
-            st.error("Working directory not configured or invalid. Set the working directory above.")
-        elif not a3d_bin_path:
-            st.warning("Alpine3D binary path not specified.")
-        else:
-            st.success(f"Ready to run Alpine3D in: **{a3d_working_dir}**")
+            if not working_dir_valid:
+                st.error("Working directory not configured or invalid. Set the working directory above.")
+            elif not a3d_bin_path:
+                st.warning("Alpine3D binary path not specified.")
+            else:
+                st.success(f"Ready to run Alpine3D in: **{a3d_working_dir}**")
 
-        # Run button
-        run_a3d_disabled = not can_run_a3d
-        if st.button("Run Alpine3D", type="primary", disabled=run_a3d_disabled, key="run_a3d_btn"):
-            st.subheader("Run Log")
-            log_container = st.container(height=400)
-            log_placeholder = log_container.empty()
-            full_log = []
+            # Run button
+            run_a3d_disabled = not can_run_a3d
+            if st.button("Run Alpine3D", type="primary", disabled=run_a3d_disabled, key="run_a3d_btn"):
+                st.subheader("Run Log")
+                log_container = st.container(height=400)
+                log_placeholder = log_container.empty()
+                full_log = []
 
-            # Placeholder for A3D run - will be implemented later
-            log_placeholder.code(f"Alpine3D run not yet implemented.\n\nWorking directory: {a3d_working_dir}\nBinary: {a3d_bin_path}\n\nThis will execute the A3D simulation using the configured INI file.", language="text")
-            st.info("Alpine3D execution will be implemented in a future update.")
+                # Placeholder for A3D run - will be implemented later
+                log_placeholder.code(f"Alpine3D run not yet implemented.\n\nWorking directory: {a3d_working_dir}\nBinary: {a3d_bin_path}\n\nThis will execute the A3D simulation using the configured INI file.", language="text")
+                st.info("Alpine3D execution will be implemented in a future update.")
 
 # ============================================================
 # OTHER LOCATIONS MODE
@@ -2092,11 +2049,11 @@ st.markdown("""
 <div style='text-align: center; color: #666; font-size: 0.9em;'>
     <p style='margin-bottom: 5px;'><strong>A3Dshell</strong> </p>
     <p style='margin: 5px 0;'>
-        <a href='https://github.com/frischwood/A3Dshell' target='_blank' style='color: #0366d6; text-decoration: none;'>
+        <a href='https://github.com/frischwood/A3Dshell-web' target='_blank' style='color: #0366d6; text-decoration: none;'>
             GitHub Repository
         </a>
         &nbsp;|&nbsp;
-        <a href='https://github.com/frischwood/A3Dshell/blob/main/LICENSE' target='_blank' style='color: #0366d6; text-decoration: none;'>
+        <a href='https://github.com/frischwood/A3Dshell-web/blob/main/LICENSE' target='_blank' style='color: #0366d6; text-decoration: none;'>
             MIT License
         </a>
     </p>
