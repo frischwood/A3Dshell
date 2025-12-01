@@ -1757,95 +1757,404 @@ with mode_tab_other:
 
         st.divider()
 
-        # ---- DEM SELECTION (FIRST) ----
-        st.subheader("1. DEM Selection")
-        st.markdown("Select your Digital Elevation Model (GeoTIFF) from the `config/dem/` directory.")
-        st.caption("Place your DEM files in `config/dem/` before starting. The DEM defines the maximum extent.")
+        # ---- DEM SOURCE SELECTION ----
+        st.subheader("1. DEM Source")
 
-        # Browse for DEM files in config/dem/
-        dem_dir = Path("config/dem")
-        dem_dir.mkdir(parents=True, exist_ok=True)
-        dem_files = list(dem_dir.glob("*.tif")) + list(dem_dir.glob("*.tiff"))
+        dem_source = st.radio(
+            "Choose DEM source:",
+            ["Upload local DEM", "Download from OpenTopography (SRTM 30m)"],
+            key="dem_source_other",
+            horizontal=True
+        )
 
         dem_bounds_wgs84 = None
         dem_crs = None
+        dem_path = None
 
-        if dem_files:
-            dem_options = ["[Select a DEM file]"] + [dem.name for dem in dem_files]
-            selected_dem = st.selectbox(
-                "Available DEM files:",
-                options=dem_options,
-                help="GeoTIFF files found in config/dem/",
-                key="dem_select_other"
+        if dem_source == "Upload local DEM":
+            # ---- UPLOAD LOCAL DEM ----
+            st.markdown("Select your Digital Elevation Model (GeoTIFF) from the `config/dem/` directory.")
+            st.caption("Place your DEM files in `config/dem/` before starting.")
+
+            dem_dir = Path("config/dem")
+            dem_dir.mkdir(parents=True, exist_ok=True)
+            dem_files = list(dem_dir.glob("*.tif")) + list(dem_dir.glob("*.tiff"))
+
+            if dem_files:
+                dem_options = ["[Select a DEM file]"] + [dem.name for dem in dem_files]
+                selected_dem = st.selectbox(
+                    "Available DEM files:",
+                    options=dem_options,
+                    help="GeoTIFF files found in config/dem/",
+                    key="dem_select_other"
+                )
+
+                if selected_dem != "[Select a DEM file]":
+                    dem_path = dem_dir / selected_dem
+                    st.session_state.config['user_dem_path'] = str(dem_path.absolute())
+
+                    # Read DEM bounds using rasterio
+                    try:
+                        with rasterio.open(dem_path) as src:
+                            dem_crs = src.crs
+                            dem_bounds_native = src.bounds
+                            dem_width = src.width
+                            dem_height = src.height
+                            dem_res = src.res
+
+                            aspect_ratio = dem_width / dem_height if dem_height > 0 else 0
+                            is_square = 0.8 <= aspect_ratio <= 1.2
+
+                            if dem_crs and str(dem_crs) != "EPSG:4326":
+                                transformer = Transformer.from_crs(dem_crs, "EPSG:4326", always_xy=True)
+                                min_lon, min_lat = transformer.transform(dem_bounds_native.left, dem_bounds_native.bottom)
+                                max_lon, max_lat = transformer.transform(dem_bounds_native.right, dem_bounds_native.top)
+                                dem_bounds_wgs84 = [min_lon, min_lat, max_lon, max_lat]
+                            else:
+                                dem_bounds_wgs84 = [dem_bounds_native.left, dem_bounds_native.bottom,
+                                                   dem_bounds_native.right, dem_bounds_native.top]
+
+                            st.session_state.config['dem_bounds_wgs84'] = dem_bounds_wgs84
+                            st.session_state.config['dem_bounds_native'] = [dem_bounds_native.left, dem_bounds_native.bottom,
+                                                                            dem_bounds_native.right, dem_bounds_native.top]
+                            st.session_state.config['dem_crs'] = str(dem_crs)
+
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.success(f"DEM: {selected_dem}")
+                                st.caption(f"Size: {dem_path.stat().st_size / (1024 * 1024):.2f} MB")
+                                st.caption(f"Dimensions: {dem_width} x {dem_height} pixels")
+                            with col2:
+                                st.caption(f"CRS: {dem_crs}")
+                                st.caption(f"Resolution: {dem_res[0]:.1f} x {dem_res[1]:.1f} m")
+                                if not is_square:
+                                    st.warning(f"DEM is not square (aspect: {aspect_ratio:.2f})")
+
+                    except Exception as e:
+                        st.error(f"Error reading DEM: {e}")
+                        st.session_state.config['user_dem_path'] = None
+                else:
+                    st.session_state.config['user_dem_path'] = None
+            else:
+                st.warning("No DEM files found in `config/dem/`")
+                st.caption("Place your GeoTIFF (.tif) DEM files in the `config/dem/` directory and refresh.")
+                st.session_state.config['user_dem_path'] = None
+
+        else:
+            # ---- OPENTOPOGRAPHY DOWNLOAD ----
+            st.markdown("Draw your region of interest on the map to download global elevation data.")
+            st.caption("Data from [OpenTopography](https://opentopography.org). Max area: 450,000 km².")
+
+            # API Key explanation
+            with st.expander("How to get an API key", expanded=False):
+                st.markdown("""
+                1. Create a free account at [OpenTopography Login](https://portal.opentopography.org/login)
+                2. After logging in, go to **My Account** → **API Key**
+                3. Click **Request API Key** and copy your key
+                """)
+
+            api_key = st.text_input(
+                "OpenTopography API Key",
+                value=st.session_state.get('opentopo_api_key', ''),
+                type="password",
+                help="Required. Create a free account at portal.opentopography.org/login",
+                key="opentopo_api_key_input"
+            )
+            if api_key:
+                st.session_state['opentopo_api_key'] = api_key
+
+            # Dataset selection
+            dem_datasets = {
+                "SRTMGL1": "SRTM GL1 (30m) - Global coverage ±60° lat",
+                "SRTMGL3": "SRTM GL3 (90m) - Global coverage ±60° lat",
+                "COP30": "Copernicus GLO-30 (30m) - Global coverage",
+                "COP90": "Copernicus GLO-90 (90m) - Global coverage",
+                "NASADEM": "NASADEM (30m) - Enhanced SRTM",
+                "AW3D30": "ALOS World 3D (30m) - Global coverage",
+                "EU_DTM": "EU-DTM (30m) - Europe only",
+                "SRTM15Plus": "SRTM15+ (500m) - Global bathymetry & topography",
+            }
+
+            selected_dataset = st.selectbox(
+                "Terrain Dataset",
+                options=list(dem_datasets.keys()),
+                format_func=lambda x: dem_datasets[x],
+                help="Choose the elevation dataset. COP30 and SRTMGL1 are recommended for most use cases.",
+                key="opentopo_dataset"
             )
 
-            if selected_dem != "[Select a DEM file]":
-                dem_path = dem_dir / selected_dem
-                st.session_state.config['user_dem_path'] = str(dem_path.absolute())
+            # ROI definition method
+            st.markdown("**Define your Region of Interest** (upload file or draw on map):")
 
-                # Read DEM bounds using rasterio
-                try:
-                    with rasterio.open(dem_path) as src:
-                        dem_crs = src.crs
-                        dem_bounds_native = src.bounds  # left, bottom, right, top
-                        dem_width = src.width
-                        dem_height = src.height
-                        dem_res = src.res
+            roi_method = st.radio(
+                "ROI input method:",
+                ["Draw on map", "Upload ROI file"],
+                horizontal=True,
+                key="opentopo_roi_method"
+            )
 
-                        # Check if DEM is roughly square (within 20% tolerance)
-                        aspect_ratio = dem_width / dem_height if dem_height > 0 else 0
-                        is_square = 0.8 <= aspect_ratio <= 1.2
+            # Helper function to read vector files (reused from later in code)
+            def read_roi_file(uploaded_file):
+                """Read various vector file formats and return a GeoDataFrame."""
+                import tempfile
+                import zipfile
+                file_ext = uploaded_file.name.lower().split('.')[-1]
+                gdf = None
+                if file_ext == 'zip':
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        with zipfile.ZipFile(uploaded_file, 'r') as zip_ref:
+                            zip_ref.extractall(tmpdir)
+                        shp_files = list(Path(tmpdir).glob('**/*.shp'))
+                        if shp_files:
+                            gdf = gpd.read_file(shp_files[0])
+                elif file_ext == 'kml':
+                    with tempfile.NamedTemporaryFile(suffix='.kml', delete=False) as tmp:
+                        tmp.write(uploaded_file.getvalue())
+                        tmp_path = tmp.name
+                    try:
+                        import fiona
+                        fiona.drvsupport.supported_drivers['KML'] = 'rw'
+                        gdf = gpd.read_file(tmp_path, driver='KML')
+                    finally:
+                        Path(tmp_path).unlink()
+                elif file_ext == 'parquet':
+                    gdf = gpd.read_parquet(uploaded_file)
+                elif file_ext in ['geojson', 'json']:
+                    gdf = gpd.read_file(uploaded_file)
+                elif file_ext == 'gpkg':
+                    with tempfile.NamedTemporaryFile(suffix='.gpkg', delete=False) as tmp:
+                        tmp.write(uploaded_file.getvalue())
+                        tmp_path = tmp.name
+                    try:
+                        gdf = gpd.read_file(tmp_path)
+                    finally:
+                        Path(tmp_path).unlink()
+                else:
+                    gdf = gpd.read_file(uploaded_file)
+                return gdf
 
-                        # Transform bounds to WGS84 for display
-                        if dem_crs and dem_crs != "EPSG:4326":
-                            transformer = Transformer.from_crs(dem_crs, "EPSG:4326", always_xy=True)
-                            min_lon, min_lat = transformer.transform(dem_bounds_native.left, dem_bounds_native.bottom)
-                            max_lon, max_lat = transformer.transform(dem_bounds_native.right, dem_bounds_native.top)
-                            dem_bounds_wgs84 = [min_lon, min_lat, max_lon, max_lat]
+            # Process uploaded ROI file
+            uploaded_roi_gdf = None
+            if roi_method == "Upload ROI file":
+                roi_file_opentopo = st.file_uploader(
+                    "Upload ROI file",
+                    type=['zip', 'kml', 'parquet', 'geojson', 'gpkg'],
+                    help="Supported: Shapefile (.zip), KML, GeoParquet, GeoJSON, GeoPackage",
+                    key="roi_upload_opentopo"
+                )
+                if roi_file_opentopo:
+                    try:
+                        uploaded_roi_gdf = read_roi_file(roi_file_opentopo)
+                        if uploaded_roi_gdf is not None and len(uploaded_roi_gdf) > 0:
+                            if uploaded_roi_gdf.crs is None:
+                                uploaded_roi_gdf = uploaded_roi_gdf.set_crs("EPSG:4326")
+                            uploaded_roi_gdf = uploaded_roi_gdf.to_crs("EPSG:4326")
+                            # Get bounding box from uploaded ROI
+                            roi_bounds = uploaded_roi_gdf.total_bounds
+                            st.session_state['opentopo_bounds'] = list(roi_bounds)
+                            st.session_state['opentopo_roi_gdf'] = uploaded_roi_gdf
+                            st.success(f"ROI loaded: {len(uploaded_roi_gdf)} feature(s)")
+                    except Exception as e:
+                        st.error(f"Error reading ROI file: {e}")
+
+            # Initialize map
+            map_center = [30, 0]
+            map_zoom = 2
+            if 'opentopo_bounds' in st.session_state:
+                bounds = st.session_state['opentopo_bounds']
+                map_center = [(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2]
+                map_zoom = 8
+
+            opentopo_map = folium.Map(
+                location=map_center,
+                zoom_start=map_zoom,
+                tiles="OpenStreetMap"
+            )
+
+            # Add Draw control
+            Draw(
+                export=False,
+                draw_options={
+                    'polyline': False,
+                    'polygon': True if roi_method == "Draw on map" else False,
+                    'circle': False,
+                    'circlemarker': False,
+                    'marker': False,
+                    'rectangle': True if roi_method == "Draw on map" else False,
+                },
+                edit_options={'edit': True, 'remove': True}
+            ).add_to(opentopo_map)
+
+            # Show uploaded ROI on map
+            if 'opentopo_roi_gdf' in st.session_state:
+                gdf = st.session_state['opentopo_roi_gdf']
+                folium.GeoJson(
+                    gdf.__geo_interface__,
+                    style_function=lambda x: {
+                        'fillColor': '#3388ff',
+                        'color': '#3388ff',
+                        'weight': 2,
+                        'fillOpacity': 0.3
+                    }
+                ).add_to(opentopo_map)
+            # Show drawn bounds if any (rectangle mode)
+            elif 'opentopo_bounds' in st.session_state:
+                bounds = st.session_state['opentopo_bounds']
+                folium.Rectangle(
+                    bounds=[[bounds[1], bounds[0]], [bounds[3], bounds[2]]],
+                    color='#3388ff',
+                    weight=2,
+                    fill=True,
+                    fillOpacity=0.2
+                ).add_to(opentopo_map)
+
+            # Fit map to bounds
+            if 'opentopo_bounds' in st.session_state:
+                bounds = st.session_state['opentopo_bounds']
+                opentopo_map.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
+
+            map_output = st_folium(opentopo_map, width=700, height=400, key="opentopo_draw_map")
+
+            # Capture drawn rectangle/polygon (only in draw mode)
+            if roi_method == "Draw on map" and map_output and map_output.get('last_active_drawing'):
+                drawn_geom = map_output['last_active_drawing']
+                if drawn_geom.get('geometry', {}).get('type') in ['Polygon', 'Rectangle']:
+                    coords = drawn_geom['geometry']['coordinates'][0]
+                    lons = [c[0] for c in coords]
+                    lats = [c[1] for c in coords]
+                    st.session_state['opentopo_bounds'] = [min(lons), min(lats), max(lons), max(lats)]
+                    # Store drawn geometry as GeoDataFrame for masking
+                    drawn_shape = shape(drawn_geom['geometry'])
+                    st.session_state['opentopo_roi_gdf'] = gpd.GeoDataFrame(geometry=[drawn_shape], crs="EPSG:4326")
+
+            # Show bounds and download button
+            if 'opentopo_bounds' in st.session_state:
+                bounds = st.session_state['opentopo_bounds']
+                st.info(f"Selected bounds: W={bounds[0]:.4f}, S={bounds[1]:.4f}, E={bounds[2]:.4f}, N={bounds[3]:.4f}")
+
+                # Calculate area
+                from math import radians, cos
+                lat_mid = (bounds[1] + bounds[3]) / 2
+                width_km = (bounds[2] - bounds[0]) * 111 * cos(radians(lat_mid))
+                height_km = (bounds[3] - bounds[1]) * 111
+                area_km2 = width_km * height_km
+                st.caption(f"Approximate area: {area_km2:,.0f} km²")
+
+                if area_km2 > 450000:
+                    st.error("Area exceeds 450,000 km² limit. Please draw a smaller region.")
+
+                if st.button("Download DEM from OpenTopography", key="download_opentopo"):
+                    if not api_key:
+                        st.error("Please enter your OpenTopography API key.")
+                    elif area_km2 > 450000:
+                        st.error("Area too large.")
+                    else:
+                        # Check cache first
+                        from src.data.cache import CacheManager
+                        cache_dir = Path(get_cache_dir())
+                        cache = CacheManager(cache_dir)
+
+                        cache_bbox = {
+                            'south': bounds[1], 'north': bounds[3],
+                            'west': bounds[0], 'east': bounds[2],
+                            'demtype': selected_dataset
+                        }
+                        api_url = "https://portal.opentopography.org/API/globaldem"
+                        cached_file = cache.get_dem_tile(api_url, cache_bbox)
+
+                        if cached_file and cached_file.exists():
+                            st.success(f"Using cached DEM: {cached_file.name}")
+                            dem_path = cached_file
+                            st.session_state.config['user_dem_path'] = str(cached_file.absolute())
                         else:
+                            # Download from API
+                            with st.spinner("Downloading DEM from OpenTopography..."):
+                                try:
+                                    import requests
+                                    params = {
+                                        'demtype': selected_dataset,
+                                        'south': bounds[1],
+                                        'north': bounds[3],
+                                        'west': bounds[0],
+                                        'east': bounds[2],
+                                        'outputFormat': 'GTiff',
+                                        'API_Key': api_key
+                                    }
+
+                                    response = requests.get(api_url, params=params, stream=True)
+
+                                    if response.status_code == 200:
+                                        # Save to config/dem/
+                                        dem_dir = Path("config/dem")
+                                        dem_dir.mkdir(parents=True, exist_ok=True)
+                                        filename = f"{selected_dataset}_{bounds[1]:.2f}_{bounds[0]:.2f}_{bounds[3]:.2f}_{bounds[2]:.2f}.tif"
+                                        dem_path = dem_dir / filename
+
+                                        with open(dem_path, 'wb') as f:
+                                            for chunk in response.iter_content(chunk_size=8192):
+                                                f.write(chunk)
+
+                                        # Cache the file
+                                        cache.cache_dem_tile(api_url, dem_path, cache_bbox)
+
+                                        st.success(f"Downloaded DEM: {filename}")
+                                        st.session_state.config['user_dem_path'] = str(dem_path.absolute())
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Download failed: {response.status_code} - {response.text[:200]}")
+
+                                except Exception as e:
+                                    st.error(f"Download error: {e}")
+
+            # Load DEM if already downloaded
+            if st.session_state.config.get('user_dem_path'):
+                dem_path = Path(st.session_state.config['user_dem_path'])
+                if dem_path.exists():
+                    try:
+                        with rasterio.open(dem_path) as src:
+                            dem_crs = src.crs
+                            dem_bounds_native = src.bounds
+                            dem_width = src.width
+                            dem_height = src.height
+                            dem_res = src.res
+
+                            # SRTM is WGS84
                             dem_bounds_wgs84 = [dem_bounds_native.left, dem_bounds_native.bottom,
                                                dem_bounds_native.right, dem_bounds_native.top]
 
-                        # Store in session state
-                        st.session_state.config['dem_bounds_wgs84'] = dem_bounds_wgs84
-                        st.session_state.config['dem_bounds_native'] = [dem_bounds_native.left, dem_bounds_native.bottom,
-                                                                        dem_bounds_native.right, dem_bounds_native.top]
-                        st.session_state.config['dem_crs'] = str(dem_crs)
+                            st.session_state.config['dem_bounds_wgs84'] = dem_bounds_wgs84
+                            st.session_state.config['dem_bounds_native'] = list(dem_bounds_wgs84)
+                            st.session_state.config['dem_crs'] = str(dem_crs)
 
-                        # Show DEM info
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.success(f"DEM: {selected_dem}")
-                            st.caption(f"Size: {dem_path.stat().st_size / (1024 * 1024):.2f} MB")
-                            st.caption(f"Dimensions: {dem_width} x {dem_height} pixels")
-                        with col2:
-                            st.caption(f"CRS: {dem_crs}")
-                            st.caption(f"Resolution: {dem_res[0]:.1f} x {dem_res[1]:.1f} m")
-                            if not is_square:
-                                st.warning(f"DEM is not square (aspect: {aspect_ratio:.2f})")
-
-                except Exception as e:
-                    st.error(f"Error reading DEM: {e}")
-                    st.session_state.config['user_dem_path'] = None
-            else:
-                st.session_state.config['user_dem_path'] = None
-        else:
-            st.warning("No DEM files found in `config/dem/`")
-            st.caption("Place your GeoTIFF (.tif) DEM files in the `config/dem/` directory and refresh.")
-            st.session_state.config['user_dem_path'] = None
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.success(f"DEM loaded: {dem_path.name}")
+                                st.caption(f"Size: {dem_path.stat().st_size / (1024 * 1024):.2f} MB")
+                            with col2:
+                                st.caption(f"Dimensions: {dem_width} x {dem_height} pixels")
+                                st.caption(f"Resolution: {dem_res[0]:.1f} x {dem_res[1]:.1f} m")
+                    except Exception as e:
+                        st.error(f"Error reading downloaded DEM: {e}")
 
         st.divider()
-
-        # ---- ROI SELECTION (SECOND) ----
-        st.subheader("2. Region of Interest (ROI)")
 
         # Initialize ROI variables
         gdf_roi_wgs84 = None
         roi_valid = False
 
-        if dem_bounds_wgs84 is None:
+        # For OpenTopography, ROI is already defined during DEM download - skip this section
+        if dem_source == "Download from OpenTopography (SRTM 30m)":
+            if 'opentopo_roi_gdf' in st.session_state and dem_bounds_wgs84 is not None:
+                gdf_roi_wgs84 = st.session_state['opentopo_roi_gdf']
+                roi_valid = True
+            # No UI needed - ROI was defined in step 1
+
+        # For local DEM upload, show ROI selection section
+        elif dem_bounds_wgs84 is None:
+            st.subheader("2. Region of Interest (ROI)")
             st.info("Select a DEM first to define the maximum extent, then upload or draw your ROI.")
         else:
+            st.subheader("2. Region of Interest (ROI)")
             st.markdown("Upload a vector file or draw your ROI on the map. The ROI must be within the DEM bounds.")
 
             # Helper function to read vector files
@@ -2009,7 +2318,9 @@ with mode_tab_other:
         st.divider()
 
         # ---- OUTPUT GRID ----
-        st.subheader("3. Output Grid")
+        # Section number depends on whether ROI section was shown
+        grid_section_num = "2" if dem_source == "Download from OpenTopography (SRTM 30m)" else "3"
+        st.subheader(f"{grid_section_num}. Output Grid")
         gsd_other = st.number_input(
             "Output Grid Spacing (m)",
             value=float(st.session_state.config.get('gsd', 25.0)),
@@ -2022,7 +2333,8 @@ with mode_tab_other:
         st.divider()
 
         # ---- MASKING OPTIONS ----
-        st.subheader("4. Masking Options")
+        mask_section_num = "3" if dem_source == "Download from OpenTopography (SRTM 30m)" else "4"
+        st.subheader(f"{mask_section_num}. Masking Options")
 
         if gdf_roi_wgs84 is not None and roi_valid:
             mask_lus_other = st.checkbox(
