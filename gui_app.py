@@ -14,12 +14,14 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import configparser
 import os
+os.environ['USE_PYGEOS'] = '0'  # Use Shapely 2.0 instead of PyGEOS
 import folium
 from streamlit_folium import st_folium
 from folium.plugins import Draw
 import geopandas as gpd
-from shapely.geometry import shape
+from shapely.geometry import shape, box
 from pyproj import Transformer
+import rasterio
 
 # Import environment variable configuration for binary paths
 from src.config import (
@@ -380,6 +382,16 @@ if build_info:
         st.caption("This information shows the exact versions of MeteoIO and Snowpack compiled into this Docker image.")
 else:
     st.sidebar.info("Running in development mode (not Docker)")
+
+# Sidebar footer
+st.sidebar.divider()
+st.sidebar.markdown("""
+<div style='text-align: center; color: #666; font-size: 0.85em;'>
+    <a href='https://github.com/frischwood/A3Dshell' target='_blank' style='color: #0366d6; text-decoration: none;'>GitHub</a>
+    <br>
+    <span style='font-size: 0.9em;'>© 2025 A3Dshell Contributors</span>
+</div>
+""", unsafe_allow_html=True)
 
 # Initialize session state
 if 'config' not in st.session_state:
@@ -1732,7 +1744,7 @@ with mode_tab_other:
     # Tab 2: DEM (Other Locations)
     # ============================================================
     with tab2_other:
-        st.header("DEM Setup")
+        st.header("DEM & ROI Setup")
 
         st.subheader("Target Coordinate System")
         target_epsg = st.number_input(
@@ -1745,14 +1757,18 @@ with mode_tab_other:
 
         st.divider()
 
-        st.subheader("DEM Selection")
+        # ---- DEM SELECTION (FIRST) ----
+        st.subheader("1. DEM Selection")
         st.markdown("Select your Digital Elevation Model (GeoTIFF) from the `config/dem/` directory.")
-        st.caption("Place your DEM files in `config/dem/` before starting.")
+        st.caption("Place your DEM files in `config/dem/` before starting. The DEM defines the maximum extent.")
 
         # Browse for DEM files in config/dem/
         dem_dir = Path("config/dem")
         dem_dir.mkdir(parents=True, exist_ok=True)
         dem_files = list(dem_dir.glob("*.tif")) + list(dem_dir.glob("*.tiff"))
+
+        dem_bounds_wgs84 = None
+        dem_crs = None
 
         if dem_files:
             dem_options = ["[Select a DEM file]"] + [dem.name for dem in dem_files]
@@ -1765,12 +1781,52 @@ with mode_tab_other:
 
             if selected_dem != "[Select a DEM file]":
                 dem_path = dem_dir / selected_dem
-                st.success(f"DEM selected: {selected_dem}")
                 st.session_state.config['user_dem_path'] = str(dem_path.absolute())
 
-                # Show file info
-                file_size_mb = dem_path.stat().st_size / (1024 * 1024)
-                st.caption(f"File size: {file_size_mb:.2f} MB")
+                # Read DEM bounds using rasterio
+                try:
+                    with rasterio.open(dem_path) as src:
+                        dem_crs = src.crs
+                        dem_bounds_native = src.bounds  # left, bottom, right, top
+                        dem_width = src.width
+                        dem_height = src.height
+                        dem_res = src.res
+
+                        # Check if DEM is roughly square (within 20% tolerance)
+                        aspect_ratio = dem_width / dem_height if dem_height > 0 else 0
+                        is_square = 0.8 <= aspect_ratio <= 1.2
+
+                        # Transform bounds to WGS84 for display
+                        if dem_crs and dem_crs != "EPSG:4326":
+                            transformer = Transformer.from_crs(dem_crs, "EPSG:4326", always_xy=True)
+                            min_lon, min_lat = transformer.transform(dem_bounds_native.left, dem_bounds_native.bottom)
+                            max_lon, max_lat = transformer.transform(dem_bounds_native.right, dem_bounds_native.top)
+                            dem_bounds_wgs84 = [min_lon, min_lat, max_lon, max_lat]
+                        else:
+                            dem_bounds_wgs84 = [dem_bounds_native.left, dem_bounds_native.bottom,
+                                               dem_bounds_native.right, dem_bounds_native.top]
+
+                        # Store in session state
+                        st.session_state.config['dem_bounds_wgs84'] = dem_bounds_wgs84
+                        st.session_state.config['dem_bounds_native'] = [dem_bounds_native.left, dem_bounds_native.bottom,
+                                                                        dem_bounds_native.right, dem_bounds_native.top]
+                        st.session_state.config['dem_crs'] = str(dem_crs)
+
+                        # Show DEM info
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.success(f"DEM: {selected_dem}")
+                            st.caption(f"Size: {dem_path.stat().st_size / (1024 * 1024):.2f} MB")
+                            st.caption(f"Dimensions: {dem_width} x {dem_height} pixels")
+                        with col2:
+                            st.caption(f"CRS: {dem_crs}")
+                            st.caption(f"Resolution: {dem_res[0]:.1f} x {dem_res[1]:.1f} m")
+                            if not is_square:
+                                st.warning(f"DEM is not square (aspect: {aspect_ratio:.2f})")
+
+                except Exception as e:
+                    st.error(f"Error reading DEM: {e}")
+                    st.session_state.config['user_dem_path'] = None
             else:
                 st.session_state.config['user_dem_path'] = None
         else:
@@ -1780,7 +1836,180 @@ with mode_tab_other:
 
         st.divider()
 
-        st.subheader("Output Grid")
+        # ---- ROI SELECTION (SECOND) ----
+        st.subheader("2. Region of Interest (ROI)")
+
+        # Initialize ROI variables
+        gdf_roi_wgs84 = None
+        roi_valid = False
+
+        if dem_bounds_wgs84 is None:
+            st.info("Select a DEM first to define the maximum extent, then upload or draw your ROI.")
+        else:
+            st.markdown("Upload a vector file or draw your ROI on the map. The ROI must be within the DEM bounds.")
+
+            # Helper function to read vector files
+            def read_vector_file(uploaded_file):
+                """Read various vector file formats and return a GeoDataFrame."""
+                import tempfile
+                import zipfile
+
+                file_ext = uploaded_file.name.lower().split('.')[-1]
+                gdf = None
+
+                if file_ext == 'zip':
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        with zipfile.ZipFile(uploaded_file, 'r') as zip_ref:
+                            zip_ref.extractall(tmpdir)
+                        shp_files = list(Path(tmpdir).glob('**/*.shp'))
+                        if shp_files:
+                            gdf = gpd.read_file(shp_files[0])
+                elif file_ext == 'kml':
+                    with tempfile.NamedTemporaryFile(suffix='.kml', delete=False) as tmp:
+                        tmp.write(uploaded_file.getvalue())
+                        tmp_path = tmp.name
+                    try:
+                        import fiona
+                        fiona.drvsupport.supported_drivers['KML'] = 'rw'
+                        gdf = gpd.read_file(tmp_path, driver='KML')
+                    finally:
+                        Path(tmp_path).unlink()
+                elif file_ext == 'parquet':
+                    gdf = gpd.read_parquet(uploaded_file)
+                elif file_ext in ['geojson', 'json']:
+                    gdf = gpd.read_file(uploaded_file)
+                elif file_ext == 'gpkg':
+                    with tempfile.NamedTemporaryFile(suffix='.gpkg', delete=False) as tmp:
+                        tmp.write(uploaded_file.getvalue())
+                        tmp_path = tmp.name
+                    try:
+                        gdf = gpd.read_file(tmp_path)
+                    finally:
+                        Path(tmp_path).unlink()
+                else:
+                    gdf = gpd.read_file(uploaded_file)
+
+                return gdf
+
+            roi_file = st.file_uploader(
+                "Upload ROI file (optional)",
+                type=['zip', 'kml', 'parquet', 'geojson', 'gpkg'],
+                help="Supported formats: Shapefile (.zip), KML, GeoParquet, GeoJSON, GeoPackage. Or draw below.",
+                key="roi_upload_other"
+            )
+
+            # Process uploaded ROI
+            gdf_roi_wgs84 = None
+            roi_valid = False
+
+            if roi_file is not None:
+                try:
+                    gdf_roi = read_vector_file(roi_file)
+                    if gdf_roi is not None and len(gdf_roi) > 0:
+                        if gdf_roi.crs is None:
+                            st.warning("No CRS detected. Assuming WGS84.")
+                            gdf_roi = gdf_roi.set_crs("EPSG:4326")
+                        gdf_roi_wgs84 = gdf_roi.to_crs("EPSG:4326")
+                        st.session_state['gdf_roi_other'] = gdf_roi_wgs84
+                except Exception as e:
+                    st.error(f"Error reading ROI file: {e}")
+
+            # Check for ROI from session state (from drawing)
+            if gdf_roi_wgs84 is None and 'gdf_roi_other' in st.session_state:
+                gdf_roi_wgs84 = st.session_state['gdf_roi_other']
+
+            # Create the map
+            center_lat = (dem_bounds_wgs84[1] + dem_bounds_wgs84[3]) / 2
+            center_lon = (dem_bounds_wgs84[0] + dem_bounds_wgs84[2]) / 2
+
+            dem_roi_map = folium.Map(
+                location=[center_lat, center_lon],
+                zoom_start=10,
+                tiles="OpenStreetMap"
+            )
+
+            # Add DEM bounds (red rectangle)
+            dem_bbox = [[dem_bounds_wgs84[1], dem_bounds_wgs84[0]],
+                        [dem_bounds_wgs84[3], dem_bounds_wgs84[2]]]
+            folium.Rectangle(
+                bounds=dem_bbox,
+                color='#ff0000',
+                weight=3,
+                fill=True,
+                fillColor='#ff0000',
+                fillOpacity=0.1,
+                popup='DEM Extent'
+            ).add_to(dem_roi_map)
+
+            # Add ROI if available (blue polygon)
+            if gdf_roi_wgs84 is not None and len(gdf_roi_wgs84) > 0:
+                # Validate ROI is within DEM bounds
+                dem_polygon = box(dem_bounds_wgs84[0], dem_bounds_wgs84[1],
+                                  dem_bounds_wgs84[2], dem_bounds_wgs84[3])
+                roi_union = gdf_roi_wgs84.unary_union
+
+                if dem_polygon.contains(roi_union):
+                    roi_valid = True
+                    roi_color = '#3388ff'  # Blue for valid
+                    st.success("ROI is within DEM bounds")
+                else:
+                    roi_valid = False
+                    roi_color = '#ff8800'  # Orange for invalid
+                    st.error("ROI extends outside DEM bounds! Please adjust.")
+
+                folium.GeoJson(
+                    gdf_roi_wgs84.__geo_interface__,
+                    style_function=lambda x, color=roi_color: {
+                        'fillColor': color,
+                        'color': color,
+                        'weight': 2,
+                        'fillOpacity': 0.3
+                    }
+                ).add_to(dem_roi_map)
+
+                # Show ROI info
+                roi_bounds = gdf_roi_wgs84.total_bounds
+                st.caption(f"ROI bounds: {roi_bounds[0]:.4f}, {roi_bounds[1]:.4f} to {roi_bounds[2]:.4f}, {roi_bounds[3]:.4f}")
+
+            # Add Draw control for editing/creating ROI
+            Draw(
+                export=False,
+                draw_options={
+                    'polyline': False,
+                    'circle': False,
+                    'circlemarker': False,
+                    'marker': False,
+                    'polygon': True,
+                    'rectangle': True,
+                },
+                edit_options={'edit': True, 'remove': True}
+            ).add_to(dem_roi_map)
+
+            # Fit map to DEM bounds
+            dem_roi_map.fit_bounds(dem_bbox)
+
+            # Display map
+            st.markdown("**Map**: Red = DEM extent, Blue = ROI. Use tools on left to draw/edit ROI.")
+            map_output = st_folium(dem_roi_map, width=700, height=500, key="dem_roi_map_other")
+
+            # Handle drawn shapes from map
+            if map_output and map_output.get('last_active_drawing'):
+                drawn_geom = map_output['last_active_drawing']
+                try:
+                    drawn_shape = shape(drawn_geom['geometry'])
+                    gdf_drawn = gpd.GeoDataFrame(geometry=[drawn_shape], crs="EPSG:4326")
+                    st.session_state['gdf_roi_other'] = gdf_drawn
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error processing drawn shape: {e}")
+
+            # Store ROI validity
+            st.session_state.config['roi_valid_other'] = roi_valid
+
+        st.divider()
+
+        # ---- OUTPUT GRID ----
+        st.subheader("3. Output Grid")
         gsd_other = st.number_input(
             "Output Grid Spacing (m)",
             value=float(st.session_state.config.get('gsd', 25.0)),
@@ -1789,6 +2018,35 @@ with mode_tab_other:
             help="Output resolution in meters. Smaller values = higher resolution but longer processing time.",
             key="gsd_other"
         )
+
+        st.divider()
+
+        # ---- MASKING OPTIONS ----
+        st.subheader("4. Masking Options")
+
+        if gdf_roi_wgs84 is not None and roi_valid:
+            mask_lus_other = st.checkbox(
+                "Mask LUS to ROI polygon",
+                value=True,
+                help="If checked, land cover is cropped to ROI polygon. "
+                     "If unchecked, land cover covers entire DEM extent.",
+                key="mask_lus_other"
+            )
+            st.session_state.config['mask_lus_to_polygon'] = mask_lus_other
+
+            mask_dem_other = st.checkbox(
+                "Mask DEM to ROI polygon",
+                value=mask_lus_other,
+                disabled=not mask_lus_other,
+                help="If checked, DEM is cropped to ROI polygon (values outside = nodata). "
+                     "Cannot be enabled if LUS masking is disabled.",
+                key="mask_dem_other"
+            )
+            st.session_state.config['mask_dem_to_polygon'] = mask_dem_other if mask_lus_other else False
+        else:
+            st.info("Upload or draw a valid ROI within DEM bounds to enable masking options.")
+            st.session_state.config['mask_lus_to_polygon'] = False
+            st.session_state.config['mask_dem_to_polygon'] = False
 
         st.divider()
         st.info("Continue to the next tab: **3. Land Cover**")
