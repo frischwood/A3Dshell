@@ -1773,19 +1773,42 @@ with mode_tab_other:
 
         if dem_source == "Upload local DEM":
             # ---- UPLOAD LOCAL DEM ----
-            st.markdown("Select your Digital Elevation Model (GeoTIFF) from the `config/dem/` directory.")
-            st.caption("Place your DEM files in `config/dem/` before starting.")
+            st.markdown("Upload your Digital Elevation Model (GeoTIFF format).")
 
             dem_dir = Path("config/dem")
             dem_dir.mkdir(parents=True, exist_ok=True)
+
+            # File uploader for DEM
+            uploaded_dem = st.file_uploader(
+                "Upload DEM file",
+                type=['tif', 'tiff'],
+                help="GeoTIFF (.tif, .tiff) Digital Elevation Model",
+                key="dem_upload_other"
+            )
+
+            # Handle uploaded file
+            if uploaded_dem is not None:
+                # Save uploaded file to config/dem/
+                dem_save_path = dem_dir / uploaded_dem.name
+                with open(dem_save_path, 'wb') as f:
+                    f.write(uploaded_dem.getbuffer())
+                st.success(f"Uploaded: {uploaded_dem.name}")
+
+            # List available DEM files (including newly uploaded ones)
             dem_files = list(dem_dir.glob("*.tif")) + list(dem_dir.glob("*.tiff"))
 
             if dem_files:
                 dem_options = ["[Select a DEM file]"] + [dem.name for dem in dem_files]
+                # Pre-select the just-uploaded file if available
+                default_idx = 0
+                if uploaded_dem is not None and uploaded_dem.name in dem_options:
+                    default_idx = dem_options.index(uploaded_dem.name)
+
                 selected_dem = st.selectbox(
                     "Available DEM files:",
                     options=dem_options,
-                    help="GeoTIFF files found in config/dem/",
+                    index=default_idx,
+                    help="Uploaded DEM files",
                     key="dem_select_other"
                 )
 
@@ -1836,8 +1859,7 @@ with mode_tab_other:
                 else:
                     st.session_state.config['user_dem_path'] = None
             else:
-                st.warning("No DEM files found in `config/dem/`")
-                st.caption("Place your GeoTIFF (.tif) DEM files in the `config/dem/` directory and refresh.")
+                st.info("Upload a GeoTIFF DEM file to get started.")
                 st.session_state.config['user_dem_path'] = None
 
         else:
