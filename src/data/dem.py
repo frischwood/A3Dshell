@@ -367,6 +367,10 @@ class DEMProcessor:
             with rasterio.open(dst_file, "w", **out_meta) as dst:
                 dst.write(out_image)
 
+            # Clean up PRJ files created by GDAL (not needed for Alpine3D)
+            for prj_file in dst_file.parent.glob(f"{dst_file.stem}*.prj"):
+                prj_file.unlink()
+
             logger.info(f"   Cropped to ROI ({out_image.shape[2]}x{out_image.shape[1]} cells)")
 
     def fill_nodata(self, dem_file: Path, max_search_distance: int = 10000) -> None:

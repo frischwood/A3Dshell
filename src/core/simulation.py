@@ -180,6 +180,13 @@ class SimulationOrchestrator:
             with rasterio.open(output_dem, 'w', **meta) as dst:
                 dst.write(data, 1)
 
+        # Clean up PRJ files created by GDAL (not needed for Alpine3D)
+        for prj_pattern in [output_dem.with_suffix('.prj'), output_dem.with_suffix('.asc.aux.xml')]:
+            if prj_pattern.exists():
+                prj_pattern.unlink()
+        for prj_file in output_dem.parent.glob(f"{output_dem.stem}*.prj"):
+            prj_file.unlink()
+
         logger.info(f"   ✓ DEM converted to ASC format")
         logger.info(f"   Dimensions: {data.shape[1]} x {data.shape[0]} cells")
 
@@ -218,6 +225,13 @@ class SimulationOrchestrator:
             # Write LUS file
             with rasterio.open(lus_file, 'w', **meta) as dst:
                 dst.write(lus_data, 1)
+
+        # Clean up PRJ files created by GDAL (not needed for Alpine3D)
+        for prj_pattern in [lus_file.with_suffix('.prj'), lus_file.with_suffix('.asc.aux.xml')]:
+            if prj_pattern.exists():
+                prj_pattern.unlink()
+        for prj_file in lus_file.parent.glob(f"{lus_file.stem}*.prj"):
+            prj_file.unlink()
 
         logger.info(f"   ✓ LUS file generated: {lus_file.name}")
         logger.info(f"   All cells set to: {lus_value}")

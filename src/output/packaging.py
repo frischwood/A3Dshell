@@ -51,23 +51,14 @@ class OutputPackager:
             else:
                 logger.warning(f"   BRDF directory not found: {src_brdf}")
 
-        # PV template
-        pv_template = self.paths.input_templates / "template.pv"
-        if pv_template.exists():
-            dst_pv = self.paths.get_simu_grids_dir() / f"{self.config.simu_name}.pv"
-            shutil.copy2(pv_template, dst_pv)
-            logger.info(f"   ✓ PV template copied")
-        else:
-            logger.warning(f"   PV template not found: {pv_template}")
-
-        # POI SMET template
-        poi_template = self.paths.input_templates / "poi.smet"
-        if poi_template.exists():
-            dst_poi = self.paths.get_simu_grids_dir() / "poi.smet"
-            shutil.copy2(poi_template, dst_poi)
-            logger.info(f"   ✓ POI SMET template copied")
-        else:
-            logger.warning(f"   POI template not found: {poi_template}")
+        # PV template - disabled for now, enable for future PV developments
+        # pv_template = self.paths.input_templates / "template.pv"
+        # if pv_template.exists():
+        #     dst_pv = self.paths.get_simu_grids_dir() / f"{self.config.simu_name}.pv"
+        #     shutil.copy2(pv_template, dst_pv)
+        #     logger.info(f"   ✓ PV template copied")
+        # else:
+        #     logger.warning(f"   PV template not found: {pv_template}")
 
     def copy_ini_file(self, source_ini: Optional[Path] = None) -> None:
         """

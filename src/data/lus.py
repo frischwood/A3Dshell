@@ -304,6 +304,10 @@ class LUSProcessor:
             unique_values = np.unique(masked[masked != nodata])
             logger.info(f"   LUS grid created: {len(unique_values)} unique land use types")
 
+        # Clean up PRJ files created by GDAL (not needed for Alpine3D)
+        for prj_file in output_file.parent.glob(f"{output_file.stem}*.prj"):
+            prj_file.unlink()
+
         # Remove temporary file if it still exists
         if temp_file.exists():
             temp_file.unlink()
@@ -341,7 +345,7 @@ class LUSProcessor:
         # Read BFS GeoPackage with spatial filter (file is ~1.2GB, must filter!)
         # BFS file is in EPSG:2056 - transform bounds if needed
         logger.info(f"   Loading BFS Arealstatistik from {bfs_gpkg_path.name}")
-        bbox_for_filter = dem_bounds
+        bbox_for_filter = (dem_bounds.left, dem_bounds.bottom, dem_bounds.right, dem_bounds.top)
         if dem_crs and str(dem_crs) != "EPSG:2056":
             from pyproj import Transformer
             transformer = Transformer.from_crs(dem_crs, "EPSG:2056", always_xy=True)
@@ -444,6 +448,10 @@ class LUSProcessor:
             unique_values = np.unique(masked[masked != nodata])
             logger.info(f"   LUS grid created: {len(unique_values)} unique land use types")
 
+        # Clean up PRJ files created by GDAL (not needed for Alpine3D)
+        for prj_file in output_file.parent.glob(f"{output_file.stem}*.prj"):
+            prj_file.unlink()
+
         if temp_file.exists():
             temp_file.unlink()
 
@@ -532,6 +540,10 @@ class LUSProcessor:
                 dst.write(masked[0], 1)
 
         logger.info(f"   LUS grid created with constant value: {lus_value}")
+
+        # Clean up PRJ files created by GDAL (not needed for Alpine3D)
+        for prj_file in output_file.parent.glob(f"{output_file.stem}*.prj"):
+            prj_file.unlink()
 
         # Remove temporary file if it still exists
         if temp_file.exists():
