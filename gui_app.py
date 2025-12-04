@@ -465,13 +465,6 @@ with mode_tab_switzerland:
                 help="Unique name for this simulation (no spaces)"
             )
     
-        with col2:
-            coord_sys = st.selectbox(
-                "Coordinate System",
-                ["CH1903+", "CH1903", "WGS84"],
-                index=["CH1903+", "CH1903", "WGS84"].index(st.session_state.config.get('coord_sys', 'CH1903+'))
-            )
-    
         st.subheader("Simulation Period")
         col1, col2 = st.columns(2)
     
@@ -1321,19 +1314,38 @@ with mode_tab_switzerland:
     # Tab 6: Run Config
     # ============================================================
     with tab6:
+        # Output coordinate system selector (at top for visibility)
+        st.subheader("Output Coordinate System")
+        coord_sys_options = ["CH1903+", "CH1903 (Legacy)"]
+        current_coord_sys = st.session_state.config.get('coord_sys', 'CH1903+')
+        # Handle legacy config values
+        if current_coord_sys == "CH1903":
+            current_coord_sys = "CH1903 (Legacy)"
+        elif current_coord_sys not in coord_sys_options:
+            current_coord_sys = "CH1903+"
+        coord_sys_display = st.selectbox(
+            "Select output CRS",
+            coord_sys_options,
+            index=coord_sys_options.index(current_coord_sys),
+            help="Coordinate system for Alpine3D output. CH1903+ (EPSG:2056) is the current Swiss standard. CH1903 (EPSG:21781) is the legacy system Alpine3D was developed on."
+        )
+        # Convert display value back to config value
+        coord_sys = "CH1903" if coord_sys_display == "CH1903 (Legacy)" else coord_sys_display
+
+        st.divider()
         st.header("Configuration Summary")
-    
+
         # Build start/end datetime strings
         start_dt = datetime.combine(start_date, start_time)
         end_dt = datetime.combine(end_date, end_time)
-    
+
         # Summary display
         col1, col2 = st.columns(2)
 
         with col1:
             st.metric("Simulation Name", simu_name)
             st.metric("Period", f"{(end_dt - start_dt).days} days")
-            st.metric("Coordinate System", coord_sys)
+            st.metric("Output CRS", coord_sys)
             st.metric("Grid Spacing", f"{gsd}m")
 
         with col2:
@@ -1443,14 +1455,7 @@ USE_SHP_ROI = {'true' if use_shapefile else 'false'}
         # Run simulation section
         st.header("Run Setup")
 
-        col1, col2 = st.columns([2, 1])
-
-        with col1:
-            log_level = st.selectbox("Log Level", ["INFO", "DEBUG", "WARNING", "ERROR"])
-    
-        with col2:
-            st.write("")  # Spacing
-            st.write("")  # Spacing
+        log_level = st.selectbox("Log Level", ["INFO", "DEBUG", "WARNING", "ERROR"])
     
         # Check if ROI is validated
         roi_validated = st.session_state.get('roi_validated', False)
@@ -1842,16 +1847,37 @@ with mode_tab_other:
                                                                             dem_bounds_native.right, dem_bounds_native.top]
                             st.session_state.config['dem_crs'] = str(dem_crs)
 
+                            # Validate DEM CRS against target EPSG
+                            dem_epsg = dem_crs.to_epsg() if dem_crs else None
+                            crs_match = dem_epsg == target_epsg if dem_epsg else False
+
                             col1, col2 = st.columns(2)
                             with col1:
                                 st.success(f"DEM: {selected_dem}")
                                 st.caption(f"Size: {dem_path.stat().st_size / (1024 * 1024):.2f} MB")
                                 st.caption(f"Dimensions: {dem_width} x {dem_height} pixels")
                             with col2:
-                                st.caption(f"CRS: {dem_crs}")
+                                if dem_epsg is None:
+                                    st.warning(f"CRS: {dem_crs} (unknown EPSG)")
+                                elif crs_match:
+                                    st.success(f"CRS: EPSG:{dem_epsg} ✓")
+                                else:
+                                    st.warning(f"CRS: EPSG:{dem_epsg} ≠ target EPSG:{target_epsg}")
                                 st.caption(f"Resolution: {dem_res[0]:.1f} x {dem_res[1]:.1f} m")
                                 if not is_square:
                                     st.warning(f"DEM is not square (aspect: {aspect_ratio:.2f})")
+
+                            # Show CRS mismatch warning below the info box
+                            if dem_epsg is not None and not crs_match:
+                                st.warning(
+                                    f"**CRS Mismatch**: Your DEM is in EPSG:{dem_epsg} but target EPSG is {target_epsg}. "
+                                    f"Please provide a DEM in EPSG:{target_epsg} or change the target EPSG above to {dem_epsg}."
+                                )
+                            elif dem_epsg is None:
+                                st.warning(
+                                    "**No CRS detected**: Your DEM has no coordinate reference system. "
+                                    "Alpine3D will interpret coordinates according to the target EPSG setting."
+                                )
 
                     except Exception as e:
                         st.error(f"Error reading DEM: {e}")
